@@ -88,5 +88,6 @@ mates count as 0 or 1. A move's loss is the best move's expected points minus th
 Accuracy per move is `103.1668 · e^(-4.354 · loss) - 3.1669`, clamped to 0–100, and a player's
 accuracy is the mean over their unforced moves.
 
-The site evaluates with G0, the hand-written evaluation. When a trained network is served through
-WebAssembly, `web/engine-tasks.js` is the one place to switch it in.
+The engine worker searches with Stockhorse in WebAssembly and the network named in
+`web/config.js` (G21), and falls back to the reference engine with G0, the hand-written
+evaluation, when that is unavailable. See [DEPLOY.md](DEPLOY.md).

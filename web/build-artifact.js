@@ -13,7 +13,9 @@ const engine = read('../reference/engine.js');
 const endgame = read('endgame.js');
 const tasks = read('engine-tasks.js');
 const worker = read('engine-worker.js').replace(/^importScripts\(.*\);$/m, '');
-const workerSrc = `${engine}\n${endgame}\n${tasks}\n${worker}`;
+// No WebAssembly engine inside an Artifact: the worker searches with G0.
+const config = "self.MAKI_CONFIG = { server: '', wasm: '', net: '' };";
+const workerSrc = `${engine}\n${endgame}\n${tasks}\n${config}\n${worker}`;
 
 let html = read('index.html');
 html = html.replace(/\s*<link rel="icon"[^>]*>/, '');

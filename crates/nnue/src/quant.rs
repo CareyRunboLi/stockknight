@@ -266,6 +266,16 @@ impl QuantNet {
         }
         let mut h1 = [0i16; MAX_HIDDEN];
         let n = 2 * ft;
+        #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+        if n % 16 == 0 {
+            // WebAssembly SIMD (the website): the same integer sums, 8 lanes at a time.
+            for (o, h) in h1[..self.l1].iter_mut().enumerate() {
+                let row = &self.l1_w[o * n..(o + 1) * n];
+                let sum = self.l1_b[o].wrapping_add(wasm_simd::dot_i8_u8(row, &x[..n]));
+                *h = (sum >> self.l1_shift).clamp(0, 127) as i16;
+            }
+            return self.finish(&h1);
+        }
         for (o, h) in h1[..self.l1].iter_mut().enumerate() {
             let row = &self.l1_w[o * n..(o + 1) * n];
             let sum = row.iter().zip(&x[..n]).fold(self.l1_b[o], |s, (&w, &a)| {
@@ -472,5 +482,40 @@ mod avx2 {
             out = out.wrapping_add(w as i32 * h);
         }
         out
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+mod wasm_simd {
+    use core::arch::wasm32::*;
+
+    /// Σ w[i]·x[i] for i8 weights and u8 activations (0..=127); `w.len()` is a multiple of 16.
+    #[inline(always)]
+    pub fn dot_i8_u8(w: &[i8], x: &[u8]) -> i32 {
+        let n = w.len().min(x.len()) & !15;
+        let mut acc = i32x4_splat(0);
+        let mut i = 0;
+        while i < n {
+            // SAFETY: i + 16 <= n <= both lengths; v128 loads have no alignment requirement.
+            let (wv, xv) = unsafe {
+                (
+                    v128_load(w.as_ptr().add(i) as *const v128),
+                    v128_load(x.as_ptr().add(i) as *const v128),
+                )
+            };
+            // Products fit i16 (127·127), and i32x4_dot_i16x8 sums pairs into i32 lanes.
+            let lo = i32x4_dot_i16x8(i16x8_extend_low_i8x16(wv), u16x8_extend_low_u8x16(xv));
+            let hi = i32x4_dot_i16x8(i16x8_extend_high_i8x16(wv), u16x8_extend_high_u8x16(xv));
+            acc = i32x4_add(acc, i32x4_add(lo, hi));
+            i += 16;
+        }
+        let mut s = i32x4_extract_lane::<0>(acc)
+            .wrapping_add(i32x4_extract_lane::<1>(acc))
+            .wrapping_add(i32x4_extract_lane::<2>(acc))
+            .wrapping_add(i32x4_extract_lane::<3>(acc));
+        for j in n..w.len().min(x.len()) {
+            s = s.wrapping_add(w[j] as i32 * x[j] as i32);
+        }
+        s
     }
 }

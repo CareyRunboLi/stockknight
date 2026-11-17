@@ -76,6 +76,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sk-wasm"
+version = "0.1.0"
+dependencies = [
+ "sk-core",
+ "sk-eval",
+ "sk-nnue",
+ "sk-search",
+]
+
+[[package]]
 name = "stockknight"
 version = "0.1.0"
 dependencies = [

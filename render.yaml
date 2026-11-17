@@ -1,0 +1,12 @@
+# The online-games server (web/server.js) on Render's free plan, as a Blueprint:
+# render.com → New → Blueprint → pick this repository. Then put the service's URL in the
+# repository variable MAKI_SERVER_URL so the GitHub Pages site uses it (see docs/DEPLOY.md).
+services:
+  - type: web
+    name: maki-server
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node web/server.js
+    healthCheckPath: /api/health
+    autoDeploy: true

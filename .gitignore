@@ -12,3 +12,5 @@ __pycache__/
 .pytest_cache/
 target/.sk-source-hash
 web/dist/
+!web/nets/*.nnue
+web/engine/

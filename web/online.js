@@ -18,6 +18,9 @@
 
 (function (root) {
   const SK = root.StockKnight;
+  // Where web/server.js runs: the page's own origin, or another host (config.js, e.g. a game
+  // server for the GitHub Pages site). The server allows cross-origin requests to /api.
+  const API = String((root.MAKI_CONFIG && root.MAKI_CONFIG.server) || '').replace(/\/+$/, '');
 
   function newCode() {
     const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -43,7 +46,7 @@
     const post = async (path, body) => {
       let r;
       try {
-        r = await fetch(path, { method: 'POST', body: JSON.stringify(body) });
+        r = await fetch(API + path, { method: 'POST', body: JSON.stringify(body) });
       } catch {
         throw new Error('No connection to the server');
       }
@@ -70,7 +73,7 @@
         let es = null, you = null, closed = false, retry = 0;
         const open = () => {
           if (closed) return;
-          es = new EventSource(`/api/rooms/${id}/events?token=${encodeURIComponent(tokenOf(id) || '')}`);
+          es = new EventSource(`${API}/api/rooms/${id}/events?token=${encodeURIComponent(tokenOf(id) || '')}`);
           es.onopen = () => onConn(true);
           es.addEventListener('hello', e => (you = JSON.parse(e.data).you));
           es.addEventListener('state', e => {
@@ -85,7 +88,7 @@
             // The server answered with an error (a restart, or the game is gone): check, then retry.
             es = null;
             try {
-              const r = await fetch(`/api/rooms/${id}`);
+              const r = await fetch(`${API}/api/rooms/${id}`);
               if (r.status === 404) return closed || onError(new Error('That game does not exist (games close after a few idle hours)'));
             } catch {
               /* still offline */
@@ -120,7 +123,7 @@
         let stop = false, timer = 0;
         const poll = async () => {
           try {
-            const r = await fetch('/api/lobby', { cache: 'no-store' });
+            const r = await fetch(`${API}/api/lobby`, { cache: 'no-store' });
             const d = await r.json();
             if (stop) return;
             onList({
@@ -327,7 +330,7 @@
       return null;
     }
     try {
-      const r = await fetch('/api/health');
+      const r = await fetch(`${API}/api/health`);
       if (r.ok) return serverBackend(store);
     } catch {
       /* no server */

@@ -41,6 +41,7 @@ const TYPES = {
   '.json': 'application/json',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.wasm': 'application/wasm',
 };
 
 const DEFAULTS = {
@@ -602,6 +603,17 @@ function createGameServer(options = {}) {
       return res.end();
     }
     if (url.pathname.startsWith('/api/')) {
+      // Players' tokens travel in requests, not cookies, so any site may use the API: the
+      // GitHub Pages site talks to this server from another origin.
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        });
+        return res.end();
+      }
       api(req, res, url).catch(err => send(res, 500, { error: String(err.message || err) }));
     } else if (req.method === 'GET' || req.method === 'HEAD') {
       serveStatic(req, res, url);

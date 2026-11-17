@@ -172,7 +172,8 @@
 
     // Abandon whatever is running (a new game while the engine thinks).
     reset() {
-      if (this.worker) {
+      // An idle worker has nothing to cancel; keeping it saves reloading the network.
+      if (this.worker && this.pending.size) {
         this.worker.terminate();
         for (const [, p] of this.pending) p.reject(new Error('cancelled'));
         this.pending.clear();
@@ -2335,7 +2336,9 @@
         $('#onlineCard').disabled = true;
         $('#onlineSub').textContent = window.claude
           ? 'Sign in to claude.ai, and ask the owner for access that lets you interact with this page.'
-          : 'Needs the Maki server: run node web/server.js and open the page it prints.';
+          : (window.MAKI_CONFIG && window.MAKI_CONFIG.server)
+            ? 'The game server is not answering. It may be waking up: try again in a minute.'
+            : 'Needs the Maki server: run node web/server.js and open the page it prints.';
       } else if (b.kind === 'db') {
         $('#onlineSub').textContent = 'Make a game, and your friend joins it from this same page. Draw offers and rematches; no clocks here.';
       }
