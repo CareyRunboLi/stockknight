@@ -1,6 +1,16 @@
 target/
+target-tb/
+/tb/
 runs/
 .venv/
 wheelhouse/
 __pycache__/
 node_modules/
+*.bin
+__pycache__/
+*.nnue
+.pytest_cache/
+target/.sk-source-hash
+web/dist/
+!web/nets/*.nnue
+web/engine/

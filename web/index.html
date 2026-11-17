@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maki</title>
+  <meta name="description" content="Play Maki, the 6×6 drop game, against the Stockhorse engine or a friend, and review your games move by move.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/" aria-label="Maki home">
+      <span class="brand-mark" id="brandMark"></span>
+      <span class="brand-name"><b>Maki</b></span>
+    </a>
+    <nav class="nav">
+      <a href="#/" data-nav="home">Play</a>
+      <a href="#/analysis" data-nav="analysis">Analysis</a>
+      <a href="#/review" data-nav="review">Review</a>
+      <a href="#/rules" data-nav="rules">Rules</a>
+    </nav>
+    <button class="icon-btn" id="themeBtn" title="Board colours" aria-label="Change board colours">
+      <svg viewBox="0 0 24 24"><path d="M4 4h8v8H4zM12 12h8v8h-8z"/><path d="M12 4h8v8h-8zM4 12h8v8H4z" opacity=".35"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- Home -------------------------------------------------------------------------------- -->
+    <section class="view" id="view-home">
+      <div class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">Maki · 6×6 · drops</p>
+          <h1>Every square is two steps and a turn away.</h1>
+          <p class="lede">A small board, a reserve to drop from, and a knight that still moves in its L. Play Stockhorse, the engine, sit a friend down beside you, or send them a link. Then review the game to see which moves were brilliant and which were blunders.</p>
+        </div>
+        <div class="hero-art" id="heroArt" aria-hidden="true"></div>
+      </div>
+
+      <div class="modes">
+        <button class="mode-card" data-mode="pve">
+          <span class="mode-icon" data-piece="N"></span>
+          <span class="mode-title">Play Stockhorse</span>
+          <span class="mode-sub">Pick a strength by Elo, from a beginner who blunders to 3000 at full strength.</span>
+        </button>
+        <button class="mode-card" data-mode="local">
+          <span class="mode-icon" data-piece="R"></span>
+          <span class="mode-title">Pass and play</span>
+          <span class="mode-sub">Two players, one screen. The board turns to face whoever is to move.</span>
+        </button>
+        <button class="mode-card" data-mode="online" id="onlineCard">
+          <span class="mode-icon" data-piece="Q"></span>
+          <span class="mode-title">Play online</span>
+          <span class="mode-sub" id="onlineSub">Quick pairing or an invite link, with clocks, draw offers and rematches.</span>
+        </button>
+        <button class="mode-card" data-mode="analysis">
+          <span class="mode-icon" data-piece="K"></span>
+          <span class="mode-title">Analysis board</span>
+          <span class="mode-sub">Set up any position, try moves for both sides and see Stockhorse's best lines.</span>
+        </button>
+        <button class="mode-card" data-mode="review">
+          <span class="mode-icon" data-piece="B"></span>
+          <span class="mode-title">Review a game</span>
+          <span class="mode-sub">Move-by-move analysis with accuracy, an evaluation graph and Stockhorse's best line.</span>
+        </button>
+      </div>
+
+      <div class="recent" id="recentWrap" hidden>
+        <h2>Recent games</h2>
+        <ul class="recent-list" id="recentList"></ul>
+      </div>
+    </section>
+
+    <!-- Play ------------------------------------------------------------------------------- -->
+    <section class="view" id="view-play" hidden>
+      <div class="arena">
+        <div class="board-col">
+          <div class="player-bar" id="barTop"></div>
+          <div class="board-wrap">
+            <div class="evalbar" id="playEval" hidden><div class="evalbar-fill"></div><span class="evalbar-text"></span></div>
+            <div class="board" id="playBoard"></div>
+          </div>
+          <div class="player-bar" id="barBottom"></div>
+        </div>
+        <aside class="panel">
+          <div class="status" id="playStatus"></div>
+          <ol class="moves" id="playMoves"></ol>
+          <div class="controls">
+            <button class="btn" id="btnUndo" title="Take back">↶ Take back</button>
+            <button class="btn" id="btnFlip" title="Flip board">⇅ Flip</button>
+            <button class="btn" id="btnEval" title="Show Stockhorse's evaluation">Eval bar</button>
+            <button class="btn danger" id="btnResign">Resign</button>
+          </div>
+          <div class="controls">
+            <button class="btn" id="btnNew">New game</button>
+            <button class="btn" id="btnAnalysePlay" title="Open this game on the analysis board">Analyse</button>
+            <button class="btn primary" id="btnReviewThis">Review this game</button>
+          </div>
+          <div class="online-box" id="onlineBox" hidden>
+            <p class="online-info" id="onlineInfo" hidden></p>
+            <div class="controls" id="onlineActions"></div>
+          </div>
+          <div class="share" id="sharePanel" hidden>
+            <p id="shareText">Send this link to your opponent:</p>
+            <div class="share-row"><input id="shareLink" readonly><button class="btn" id="btnCopy">Copy</button></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Review ----------------------------------------------------------------------------- -->
+    <section class="view" id="view-review" hidden>
+      <div class="review-empty" id="reviewEmpty">
+        <h2>Review a game</h2>
+        <p>Pick one of your recent games, or paste a move list (UCI moves separated by spaces, such as <code>b2b3 c5c4 R@c4</code>).</p>
+        <ul class="recent-list" id="reviewRecent"></ul>
+        <textarea id="importMoves" rows="3" placeholder="b2b3 c5c4 …"></textarea>
+        <div class="controls"><button class="btn primary" id="btnImport">Review these moves</button></div>
+        <p class="error" id="importError" hidden></p>
+      </div>
+
+      <div class="arena" id="reviewArena" hidden>
+        <div class="board-col">
+          <div class="player-bar" id="rBarTop"></div>
+          <div class="board-wrap">
+            <div class="evalbar" id="reviewEval"><div class="evalbar-fill"></div><span class="evalbar-text"></span></div>
+            <div class="board" id="reviewBoard"></div>
+          </div>
+          <div class="player-bar" id="rBarBottom"></div>
+          <div class="navrow">
+            <button class="btn" data-step="start" title="Start (Home)">⏮</button>
+            <button class="btn" data-step="prev" title="Back (←)">◀</button>
+            <button class="btn" data-step="next" title="Forward (→)">▶</button>
+            <button class="btn" data-step="end" title="End (End)">⏭</button>
+            <button class="btn" id="rFlip" title="Flip board">⇅</button>
+          </div>
+        </div>
+        <aside class="panel">
+          <div class="progress" id="reviewProgress" hidden>
+            <div class="progress-text">Analysing… <span id="progressText"></span></div>
+            <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          </div>
+          <div class="summary" id="reviewSummary" hidden></div>
+          <div class="coach" id="coach"></div>
+          <svg class="graph" id="evalGraph" viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Evaluation over the game"></svg>
+          <ol class="moves" id="reviewMoves"></ol>
+          <div class="controls">
+            <label class="depth">Depth
+              <select id="reviewDepth">
+                <option value="250">Quick</option>
+                <option value="700" selected>Standard</option>
+                <option value="1800">Deep</option>
+              </select>
+            </label>
+            <button class="btn" id="btnReanalyse">Analyse again</button>
+            <button class="btn" id="btnCopyMoves">Copy moves</button>
+            <button class="btn" id="btnAnalyseHere" title="Open this position on the analysis board">Analyse from here</button>
+            <button class="btn" id="btnOther">Other games</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Analysis board ----------------------------------------------------------------------- -->
+    <section class="view" id="view-analysis" hidden>
+      <div class="arena">
+        <div class="board-col">
+          <div class="player-bar" id="aBarTop"></div>
+          <div class="board-wrap">
+            <div class="evalbar" id="aEval"><div class="evalbar-fill"></div><span class="evalbar-text"></span></div>
+            <div class="board" id="aBoard"></div>
+          </div>
+          <div class="player-bar" id="aBarBottom"></div>
+          <div class="navrow" id="aNav">
+            <button class="btn" data-astep="start" title="Start (Home)">⏮</button>
+            <button class="btn" data-astep="prev" title="Back (←)">◀</button>
+            <button class="btn" data-astep="next" title="Forward (→)">▶</button>
+            <button class="btn" data-astep="end" title="End of the line (End)">⏭</button>
+            <button class="btn" id="aFlip" title="Flip board (F)">⇅</button>
+          </div>
+        </div>
+
+        <aside class="panel" id="aPanel">
+          <div class="status" id="aStatus"></div>
+          <div class="tb" id="aTb" hidden></div>
+          <div class="engine" id="aEngine">
+            <div class="engine-head">
+              <label class="switch" title="Stockhorse analysis on or off">
+                <input type="checkbox" id="aEngineOn" checked><span class="switch-track"></span>
+                <span>Stockhorse</span>
+              </label>
+              <span class="engine-score" id="aScore"></span>
+              <label class="depth">Lines
+                <select id="aMultipv">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="5">5</option>
+                </select>
+              </label>
+            </div>
+            <div class="engine-info" id="aInfo"></div>
+            <ol class="pv-lines" id="aLines"></ol>
+          </div>
+          <div class="tree" id="aTree"></div>
+          <div class="controls">
+            <button class="btn" id="aPromote" title="Make this line the main line">Make main line</button>
+            <button class="btn danger" id="aDelete" title="Delete this move and everything after it">Delete from here</button>
+          </div>
+          <label class="field">Position
+            <div class="share-row"><input id="aFen" spellcheck="false" autocomplete="off"><button class="btn" id="aFenCopy" type="button">Copy</button><button class="btn" id="aFenLoad" type="button">Load</button></div>
+          </label>
+          <p class="error" id="aFenError" hidden></p>
+          <div class="controls">
+            <button class="btn" id="aSetup">Set up position</button>
+            <button class="btn" id="aReset" title="Clear the moves and start from the starting position">Starting position</button>
+            <button class="btn" id="aCopyLine" title="Copy the moves from the first position to this one">Copy moves</button>
+            <select class="btn" id="aLesson" title="Set up a lone-piece ending to practise, with the exact result of every move">
+              <option value="">Lone-piece endings…</option>
+              <option value="6/6/6/6/5B/K1k3[-] w 0 1">King and bishop v king</option>
+              <option value="5N/6/6/2k3/6/K5[-] w 0 1">King and knight v king</option>
+              <option value="6/6/6/2NN2/2k3/K5[-] w 0 1">King and two knights v king</option>
+            </select>
+            <button class="btn primary" id="aPlayHere" title="Play Stockhorse from this position">Play from here</button>
+          </div>
+        </aside>
+
+        <aside class="panel editor" id="aEditor" hidden>
+          <div class="status">Set up a position<span class="sub">Pick a piece, then click squares to place it. Click a piece of the same kind, or right-click, to remove it.</span></div>
+          <div class="palette" id="ePalette"></div>
+          <h3 class="editor-h">Reserves</h3>
+          <div class="ereserves" id="eReserves"></div>
+          <h3 class="editor-h">Side to move</h3>
+          <div class="seg" id="eSide">
+            <label><input type="radio" name="eside" value="w" checked><span>White</span></label>
+            <label><input type="radio" name="eside" value="b"><span>Black</span></label>
+          </div>
+          <div class="controls">
+            <button class="btn" id="eStart">Starting position</button>
+            <button class="btn" id="eClear">Clear board</button>
+            <button class="btn" id="eFlip">⇅ Flip</button>
+          </div>
+          <p class="error" id="eError" hidden></p>
+          <div class="controls">
+            <button class="btn" id="eCancel">Cancel</button>
+            <button class="btn primary" id="eDone">Analyse this position</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Rules ------------------------------------------------------------------------------ -->
+    <section class="view" id="view-rules" hidden>
+      <article class="rules">
+        <h2>Maki in two minutes</h2>
+        <p>The rules Stockhorse and every part of this site play by (ruleset <code>knightchess-2</code>).</p>
+        <h3>Board and pieces</h3>
+        <ul>
+          <li>6×6 board. White sets up on rank 1 as bishop, knight, queen, king, knight, rook, with pawns on rank 2. Black's setup is the same rotated half a turn.</li>
+          <li><b>King</b> and <b>queen</b> both step one square in any direction. No castling.</li>
+          <li><b>Rook</b>, <b>bishop</b> and <b>knight</b> move as in chess.</li>
+          <li>A king attacks the 8 squares around it, as in chess, so the two kings can never stand next to each other.</li>
+        </ul>
+        <h3>Pawns</h3>
+        <ul>
+          <li>A pawn can always move or capture one square straight ahead, all the way to the far rank. It never captures diagonally.</li>
+          <li>In the opponent's half (ranks 4–6 for White) it can also move or capture one square left or right.</li>
+          <li>A pawn never moves backwards. No double step, en passant or promotion: a pawn on the far rank can only step sideways.</li>
+        </ul>
+        <h3>Drops</h3>
+        <ul>
+          <li>Each side starts with 2 pawns, 1 rook and 1 bishop in reserve. Instead of moving, you may drop one on any empty square.</li>
+          <li>Captured pieces leave the game; they never join a reserve.</li>
+          <li>No pawn drop on a file that already has one of your own pawns; any rank is fine, the far rank included. A rook or bishop drop needs fewer than 2 of your rooks and bishops on the board.</li>
+        </ul>
+        <h3>Winning</h3>
+        <ul>
+          <li>If you have no legal move, you lose. Checkmate <i>and</i> stalemate both lose.</li>
+          <li>Draws: the same position three times, or bare kings with empty reserves.</li>
+        </ul>
+        <h3>A king and one or two minor pieces against a bare king</h3>
+        <ul>
+          <li>A lone <b>bishop</b> or a lone <b>knight</b> can never give checkmate: the piece that gives check never guards the squares directly beside the king (up, down, left and right), and the other king cannot guard all of those without standing next to it.</li>
+          <li><b>Two knights</b> can checkmate, but cannot force it: the bare king can always step away from a mate.</li>
+          <li>All three still win, because stalemate loses. With the stronger side to move, king and bishop always win (at most 20 moves), king and knight win unless the knight is already trapped (at most 33 moves), and king and two knights always win (at most 29 moves).</li>
+          <li>The analysis board knows every such position exactly: set one up, or pick one from <b>Lone-piece endings</b>, to see the result of every move.</li>
+        </ul>
+        <p class="muted">To drop, click a piece in your reserve (beside the board) and then an empty square.</p>
+      </article>
+    </section>
+  </main>
+
+  <!-- Dialogs ------------------------------------------------------------------------------- -->
+  <dialog id="dlgPve" class="dialog">
+    <form method="dialog">
+      <h2>Choose your opponent</h2>
+      <div class="strength">
+        <div class="strength-head">
+          <span class="strength-piece" id="strengthPiece" aria-hidden="true"></span>
+          <div>
+            <div class="strength-elo"><b id="strengthElo">1200</b> <span>Elo</span> <span class="strength-name" id="strengthName"></span></div>
+            <small id="strengthBlurb"></small>
+          </div>
+        </div>
+        <div class="strength-row">
+          <button class="icon-btn" id="strengthDown" aria-label="50 Elo weaker">&minus;</button>
+          <input type="range" id="strengthRange" min="400" max="3000" step="50" value="1200" aria-label="Stockhorse strength in Elo">
+          <button class="icon-btn" id="strengthUp" aria-label="50 Elo stronger">+</button>
+        </div>
+        <div class="strength-scale"><span id="strengthMin">400</span><span id="strengthMax">3000</span></div>
+        <div class="strength-presets" id="strengthPresets">
+          <button data-elo="800">800</button><button data-elo="1200">1200</button><button data-elo="1600">1600</button>
+          <button data-elo="2000">2000</button><button data-elo="2400">2400</button><button data-elo="3000">3000</button>
+        </div>
+      </div>
+      <h3>Play as</h3>
+      <div class="seg" id="colorSeg">
+        <label><input type="radio" name="color" value="w" checked><span>White</span></label>
+        <label><input type="radio" name="color" value="random"><span>Random</span></label>
+        <label><input type="radio" name="color" value="b"><span>Black</span></label>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="ok" id="pveStart">Play</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgOnline" class="dialog">
+    <form method="dialog">
+      <h2>Play online</h2>
+      <label class="field">Your name <input id="onlineName" maxlength="24" placeholder="Anonymous" autocomplete="nickname"></label>
+      <div id="tcWrap">
+        <h3>Time control</h3>
+        <div class="seg wrap" id="tcSeg">
+          <label><input type="radio" name="tc" value="60+0"><span>1 min</span></label>
+          <label><input type="radio" name="tc" value="180+2"><span>3 | 2</span></label>
+          <label><input type="radio" name="tc" value="300+0" checked><span>5 min</span></label>
+          <label><input type="radio" name="tc" value="600+5"><span>10 | 5</span></label>
+          <label><input type="radio" name="tc" value="900+10"><span>15 | 10</span></label>
+          <label><input type="radio" name="tc" value="none"><span>Untimed</span></label>
+        </div>
+      </div>
+      <div class="quick-row" id="quickWrap">
+        <button class="btn primary" value="quick">Quick pairing</button>
+        <span class="muted" id="quickNote">Plays the next person who picks the same time control.</span>
+      </div>
+      <h3>Invite a friend, playing as</h3>
+      <div class="quick-row">
+        <div class="seg">
+          <label><input type="radio" name="ocolor" value="w"><span>White</span></label>
+          <label><input type="radio" name="ocolor" value="random" checked><span>Random</span></label>
+          <label><input type="radio" name="ocolor" value="b"><span>Black</span></label>
+        </div>
+        <button class="btn" value="ok">Make an invite link</button>
+      </div>
+      <div id="openGamesWrap" hidden>
+        <h3>Open challenges</h3>
+        <ul class="open-games" id="openGames"><li class="muted">Looking for games…</li></ul>
+      </div>
+      <div id="liveGamesWrap" hidden>
+        <h3>Watch a game</h3>
+        <ul class="open-games" id="liveGames"></ul>
+      </div>
+      <h3>Join with a code</h3>
+      <div class="share-row"><input id="joinCode" placeholder="e.g. k7pm2x" autocomplete="off" maxlength="12"><button class="btn" value="code">Join</button></div>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgResult" class="dialog result">
+    <form method="dialog">
+      <div class="result-mark" id="resultMark"></div>
+      <h2 id="resultTitle"></h2>
+      <p id="resultText"></p>
+      <div class="dialog-actions">
+        <button class="btn" value="close">Look at the board</button>
+        <button class="btn" value="again" id="resultAgain">Play again</button>
+        <button class="btn primary" value="review">Review the game</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="../reference/engine.js"></script>
+  <script src="endgame.js"></script>
+  <script src="engine-tasks.js"></script>
+  <script src="review.js"></script>
+  <script src="tree.js"></script>
+  <script src="pieces.js"></script>
+  <script src="online.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

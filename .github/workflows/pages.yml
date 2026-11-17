@@ -1,0 +1,53 @@
+# Publishes the Maki website to GitHub Pages on every push to main.
+# One-time setup: Settings → Pages → Build and deployment → Source: GitHub Actions.
+# Online games: set the repository variable MAKI_SERVER_URL (Settings → Secrets and variables →
+# Actions → Variables) to where web/server.js runs, e.g. https://maki-server.onrender.com.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build Stockhorse for the browser
+        run: web/build-wasm.sh
+      - name: Test it
+        run: node web/test-wasm.js
+      - name: Assemble the site
+        env:
+          MAKI_SERVER_URL: ${{ vars.MAKI_SERVER_URL }}
+        run: web/build-pages.sh _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

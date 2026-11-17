@@ -1,0 +1,14 @@
+[package]
+name = "sk-wasm"
+version.workspace = true
+edition.workspace = true
+description = "Stockhorse for the browser: the search and a network, compiled to WebAssembly"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sk-core = { path = "../core" }
+sk-eval = { path = "../eval" }
+sk-search = { path = "../search" }
+sk-nnue = { path = "../nnue" }

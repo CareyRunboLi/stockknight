@@ -215,6 +215,81 @@ impl<E: Evaluator> Searcher<E> {
         result
     }
 
+    // --- Building blocks for callers that drive the root themselves (the website's tasks in
+    // crates/wasm, ports of web/engine-tasks.js). They mirror the reference `Searcher` fields
+    // that engine-tasks.js sets by hand.
+
+    /// Starts a search from `pos` with no limits: nodes = 0, killers cleared, history aged.
+    pub fn begin(&mut self, pos: &Position) {
+        self.nodes = 0;
+        self.stopped = false;
+        self.stop_flag.store(false, Ordering::Relaxed);
+        self.start = Instant::now();
+        self.max_nodes = u64::MAX;
+        self.deadline = None;
+        self.killers.fill(0);
+        for h in self.history.iter_mut() {
+            *h >>= 2;
+        }
+        self.eval.reset(pos);
+    }
+
+    /// Node budget and a wall-clock limit counted from `begin`.
+    pub fn set_limits(&mut self, max_nodes: Option<u64>, movetime: Option<Duration>) {
+        self.max_nodes = max_nodes.unwrap_or(u64::MAX);
+        self.deadline = movetime.map(|t| self.start + t);
+    }
+
+    pub fn nodes(&self) -> u64 {
+        self.nodes
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.stopped
+    }
+
+    pub fn elapsed(&self) -> Duration {
+        self.start.elapsed()
+    }
+
+    /// One root iteration: (best, score, every move's score, complete). With `exact_all`,
+    /// every move gets a full window and an exact score.
+    pub fn root(
+        &mut self,
+        pos: &mut Position,
+        order: &[Move],
+        depth: i32,
+        exact_all: bool,
+    ) -> (Move, i32, Vec<(Move, i32)>, bool) {
+        self.search_root(pos, order, depth, exact_all)
+    }
+
+    /// The child search after `play`: the score from the side to move's view at `ply`.
+    pub fn search(
+        &mut self,
+        pos: &mut Position,
+        depth: i32,
+        alpha: i32,
+        beta: i32,
+        ply: i32,
+    ) -> i32 {
+        self.negamax(pos, depth, alpha, beta, ply)
+    }
+
+    /// Makes a move and tells the evaluator.
+    pub fn play(&mut self, pos: &mut Position, m: Move) {
+        self.make(pos, m);
+    }
+
+    pub fn undo(&mut self, pos: &mut Position) {
+        self.unmake(pos);
+    }
+
+    /// The line from the hash table, starting with `first`.
+    pub fn line(&mut self, pos: &mut Position, first: Move, depth: i32) -> Vec<Move> {
+        self.principal_variation(pos, first, depth)
+    }
+
     fn make(&mut self, pos: &mut Position, m: Move) {
         self.eval.make(pos, m);
         pos.make_move(m);
@@ -314,6 +389,9 @@ impl<E: Evaluator> Searcher<E> {
         mut beta: i32,
         ply: i32,
     ) -> i32 {
+        if self.stopped {
+            return 0;
+        }
         self.nodes += 1;
         self.check_limits();
         if self.stopped {
@@ -430,6 +508,9 @@ impl<E: Evaluator> Searcher<E> {
     }
 
     fn quiesce(&mut self, pos: &mut Position, mut alpha: i32, beta: i32, ply: i32) -> i32 {
+        if self.stopped {
+            return 0;
+        }
         self.nodes += 1;
         self.check_limits();
         if self.stopped {
