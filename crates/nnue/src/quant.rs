@@ -329,11 +329,11 @@ impl QuantNet {
         if n % 16 == 0 {
             // WebAssembly SIMD (the website): the same integer sums, 8 lanes at a time.
             for (o, h) in h1[..self.l1].iter_mut().enumerate() {
-                let row = &self.l1_w[o * n..(o + 1) * n];
-                let sum = self.l1_b[o].wrapping_add(wasm_simd::dot_i8_u8(row, &x[..n]));
-                *h = (sum >> self.l1_shift).clamp(0, 127) as i16;
+                let row = &st.l1_w[o * n..(o + 1) * n];
+                let sum = st.l1_b[o].wrapping_add(wasm_simd::dot_i8_u8(row, &x[..n]));
+                *h = (sum >> st.l1_shift).clamp(0, 127) as i16;
             }
-            return self.finish(&h1);
+            return self.finish(st, &h1);
         }
         for (o, h) in h1[..self.l1].iter_mut().enumerate() {
             let row = &st.l1_w[o * n..(o + 1) * n];
