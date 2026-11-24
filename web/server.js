@@ -43,6 +43,7 @@ const TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.wasm': 'application/wasm',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const DEFAULTS = {

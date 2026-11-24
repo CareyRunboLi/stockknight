@@ -6,6 +6,7 @@
   <title>Maki</title>
   <meta name="description" content="Play Maki, the 6×6 drop game, against the Stockhorse engine or a friend, and review your games move by move.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="train.css">
 </head>
@@ -108,6 +109,7 @@
           <div class="controls">
             <button class="btn" id="btnNew">New game</button>
             <button class="btn" id="btnAnalysePlay" title="Open this game on the analysis board">Analyse</button>
+            <button class="btn" id="btnSharePlay" title="Share this game: a link, the moves or a game file">Share</button>
             <button class="btn primary" id="btnReviewThis">Review this game</button>
           </div>
           <div class="online-box" id="onlineBox" hidden>
@@ -126,10 +128,10 @@
     <section class="view" id="view-review" hidden>
       <div class="review-empty" id="reviewEmpty">
         <h2>Review a game</h2>
-        <p>Pick one of your recent games, or paste a move list (UCI moves separated by spaces, such as <code>b2b3 c5c4 R@c4</code>).</p>
+        <p>Pick one of your recent games, or bring one in: paste a shared link, a game file or a move list (UCI moves separated by spaces, such as <code>b2b3 c5c4 R@c4</code>), open a game file, or drop one anywhere on the page.</p>
         <ul class="recent-list" id="reviewRecent"></ul>
-        <textarea id="importMoves" rows="3" placeholder="b2b3 c5c4 …"></textarea>
-        <div class="controls"><button class="btn primary" id="btnImport">Review these moves</button></div>
+        <textarea id="importMoves" rows="3" placeholder="b2b3 c5c4 …  or a link, or a game file"></textarea>
+        <div class="controls"><button class="btn primary" id="btnImport">Review this game</button><button class="btn" id="btnImportFile">Open a game file…</button></div>
         <p class="error" id="importError" hidden></p>
       </div>
 
@@ -167,6 +169,7 @@
               </select>
             </label>
             <button class="btn" id="btnReanalyse">Analyse again</button>
+            <button class="btn" id="btnShareReview" title="Share this game, opening on this move">Share</button>
             <button class="btn" id="btnCopyMoves">Copy moves</button>
             <button class="btn" id="btnAnalyseHere" title="Open this position on the analysis board">Analyse from here</button>
             <button class="btn" id="btnOther">Other games</button>
@@ -229,6 +232,8 @@
             <button class="btn" id="aSetup">Set up position</button>
             <button class="btn" id="aReset" title="Clear the moves and start from the starting position">Starting position</button>
             <button class="btn" id="aCopyLine" title="Copy the moves from the first position to this one">Copy moves</button>
+            <button class="btn" id="aShare" title="Share this position and line: a link, the position or a game file">Share</button>
+            <button class="btn" id="aImport" title="Bring in a shared link, game file, position or move list">Import…</button>
             <select class="btn" id="aLesson" title="Set up a lone-piece ending to practise, with the exact result of every move">
               <option value="">Lone-piece endings…</option>
               <option value="6/6/6/6/5B/K1k3[-] w 0 1">King and bishop v king</option>
@@ -455,11 +460,55 @@
       <p id="resultText"></p>
       <div class="dialog-actions">
         <button class="btn" value="close">Look at the board</button>
+        <button class="btn" value="share">Share</button>
         <button class="btn" value="again" id="resultAgain">Play again</button>
         <button class="btn primary" value="review">Review the game</button>
       </div>
     </form>
   </dialog>
+
+  <dialog id="dlgShare" class="dialog">
+    <form method="dialog">
+      <h2 id="shareTitle">Share</h2>
+      <div class="ofen-row share-head">
+        <div class="mini-board" id="shareBoard" aria-label="The position being shared"></div>
+        <div class="ofen-side">
+          <p class="ofen-info" id="shareSummary"></p>
+          <p class="share-note" id="shareNote"></p>
+        </div>
+      </div>
+      <label class="field share-field">Link
+        <div class="share-row"><input id="shareUrl" readonly spellcheck="false"><button class="btn" type="button" id="shareCopyLink">Copy</button></div>
+      </label>
+      <div class="share-actions">
+        <button class="btn primary" type="button" id="shareNative">Share…</button>
+        <button class="btn" type="button" id="shareCopyFen">Copy position</button>
+        <button class="btn" type="button" id="shareCopyMoves">Copy moves</button>
+        <button class="btn" type="button" id="shareDownload">Download game file</button>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" value="close">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgImport" class="dialog">
+    <form method="dialog">
+      <h2>Import a game or position</h2>
+      <p>Paste a shared Maki link, a game file, a position (FEN, optionally followed by <code>moves</code> and UCI moves) or a move list. You can also paste with Ctrl+V or drop a file anywhere on the page, without opening this.</p>
+      <textarea id="importText" rows="5" spellcheck="false" placeholder="https://…#/review?moves=…   or   [White &quot;…&quot;] …   or   b2b3 c5c4 R@c4"></textarea>
+      <p class="error" id="importDlgError" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn" type="button" id="importFileBtn">Open a file…</button>
+        <button class="btn" type="button" id="importPasteBtn">Paste from clipboard</button>
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" type="button" id="importGo">Import</button>
+      </div>
+    </form>
+  </dialog>
+  <input type="file" id="importFile" accept=".txt,.maki,.pgn,text/plain" hidden>
+
+  <div class="drop-hint" aria-hidden="true"><span>Drop to import the game or position</span></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -469,6 +518,7 @@
   <script src="engine-tasks.js"></script>
   <script src="review.js"></script>
   <script src="tree.js"></script>
+  <script src="share.js"></script>
   <script src="pieces.js"></script>
   <script src="online.js"></script>
   <script src="lessons.js"></script>

@@ -468,6 +468,7 @@
       $('#btnResign').onclick = () => this.resign();
       $('#btnNew').onclick = () => this.again();
       $('#btnReviewThis').onclick = () => this.reviewThis();
+      $('#btnSharePlay').onclick = () => this.share();
       $('#btnAnalysePlay').onclick = () => {
         const g = this.game;
         if (!g) return;
@@ -663,6 +664,22 @@
       g.result = result;
       if (g.moves.length && result.reason !== 'aborted') saveGame({ ...g, moves: g.moves.slice() });
       setTimeout(() => showResult(g), 350);
+    },
+
+    share() {
+      const g = this.game;
+      if (!g) return;
+      const d = { kind: 'review', fen: g.startFen, moves: g.moves.slice(), white: g.white, black: g.black, result: g.result, date: g.date };
+      if (g.mode === 'online' && this.online) {
+        // A live game shares its room, so the link follows the game as it goes on.
+        d.kind = 'online';
+        d.url = `${Share.baseUrl(location.href)}#/online/${this.online.id}`;
+        d.summary = `${g.white} vs ${g.black} · ${g.result ? resultText(g.result) : 'live'}${g.moves.length ? ` · ${Math.ceil(g.moves.length / 2)} moves` : ''}`;
+      } else if (!g.moves.length) {
+        d.kind = 'analysis';
+        d.title = 'Share this position';
+      }
+      openShare(d);
     },
 
     reviewThis() {
@@ -1079,6 +1096,7 @@
   $('#dlgResult').addEventListener('close', () => {
     const v = $('#dlgResult').returnValue;
     if (v === 'review') play.reviewThis();
+    if (v === 'share') play.share();
     if (v === 'again') play.playAgain();
   });
 
@@ -1119,6 +1137,12 @@
         this.go(Math.round(((e.clientX - r.left) / r.width) * n));
       });
       $('#btnImport').onclick = () => this.importMoves();
+      $('#btnImportFile').onclick = () => $('#importFile').click();
+      $('#btnShareReview').onclick = () => {
+        const g = this.game;
+        if (!g) return;
+        openShare({ kind: 'review', fen: g.startFen, moves: g.moves, at: this.cursor, white: g.white, black: g.black, result: g.result, date: g.date });
+      };
       $('#btnAnalyseHere').onclick = () => {
         if (!this.game) return;
         analysis.load(this.game.startFen, this.game.moves.slice(), this.cursor);
@@ -1140,30 +1164,19 @@
       });
     },
 
+    // The box on the empty review page takes a move list, a shared link, a game file or a
+    // position with moves; whatever it holds opens in review.
     importMoves() {
-      const words = $('#importMoves').value.trim().split(/[\s,]+/).filter(Boolean)
-        .filter(w => !/^\d+\.+$/.test(w)); // tolerate move numbers like "1."
       const err = $('#importError');
-      try {
-        if (!words.length) throw new Error('Paste some moves first.');
-        const pos = buildPosition(START_FEN, words);
-        const g = {
-          id: `imp${Date.now().toString(36)}`,
-          mode: 'import',
-          startFen: START_FEN,
-          moves: words,
-          white: 'White',
-          black: 'Black',
-          result: statusToResult(pos.status()),
-          date: Date.now(),
-        };
-        err.hidden = true;
-        saveGame(g);
-        this.load(g);
-      } catch (e) {
-        err.textContent = e.message.startsWith('illegal move') ? `That move list has an ${e.message} for this position.` : e.message;
+      const text = $('#importMoves').value;
+      const r = Share.read(text);
+      if (!text.trim() || !r || r.error) {
+        err.textContent = !text.trim() ? 'Paste some moves first.' : r ? r.error : 'That is not a move list, a Maki link or a game file.';
         err.hidden = false;
+        return;
       }
+      err.hidden = true;
+      openImported(asReview(r));
     },
 
     load(game) {
@@ -1517,6 +1530,13 @@
         const text = this.tree.fen === START_FEN ? moves : `${this.tree.fen} moves ${moves}`;
         copyText(text, 'Moves copied');
       };
+      $('#aShare').onclick = () => {
+        // The whole line through this move, opening on it.
+        const at = this.tree.path(this.cur);
+        const moves = at.concat(this.tree.mainline(this.cur).map(n => n.uci));
+        openShare({ kind: 'analysis', fen: this.tree.fen, moves, at: at.length });
+      };
+      $('#aImport').onclick = () => openImport();
       $('#aPlayHere').onclick = () => openPveDialog(this.tree.position(this.cur).fen());
       $('#aPlayOnline').onclick = () => {
         if (!backend) return toast('Online play is not available here');
@@ -2107,6 +2127,261 @@
     navigator.clipboard?.writeText(text).then(() => toast(done), () => toast(text));
   }
 
+  // --- sharing and importing --------------------------------------------------------------
+
+  const Share = window.Share;
+  let shareData = null; // what the share sheet is showing
+
+  // A short line about a game or position for the share sheet and the native share text.
+  function shareSummary(d) {
+    const n = d.moves.length;
+    if (d.kind === 'online') return d.summary;
+    const who = d.white || d.black ? `${d.white || 'White'} vs ${d.black || 'Black'}` : '';
+    const res = d.result ? resultText(d.result) : '';
+    if (d.kind === 'review') return [who, res || (n ? 'unfinished' : ''), n ? `${Math.ceil(n / 2)} move${n > 2 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+    const pos = buildPosition(d.fen, d.moves.slice(0, d.at ?? n));
+    return `${colorName(pos.side)} to move${n ? ` · ${n} move${n > 1 ? 's' : ''} in the line` : ''}`;
+  }
+
+  // Opens the share sheet. `d`: { kind: 'analysis' | 'review' | 'online', fen, moves, at,
+  // white, black, result, date, url (online only), title }.
+  function openShare(d) {
+    d.fen = d.fen || START_FEN;
+    d.moves = d.moves || [];
+    const at = d.at ?? d.moves.length;
+    shareData = d;
+    d.url = d.url || Share.shareUrl(location.href, d.kind, d);
+    const pos = buildPosition(d.fen, d.moves.slice(0, at));
+    $('#shareTitle').textContent = d.title || (d.kind === 'analysis' ? 'Share this position' : 'Share this game');
+    $('#shareBoard').innerHTML = miniBoard(pos);
+    $('#shareSummary').textContent = shareSummary(d);
+    $('#shareNote').textContent = d.kind === 'online'
+      ? 'The link opens the live game. Anyone who opens it can watch, or take an empty seat.'
+      : d.kind === 'review'
+        ? 'The link opens the game in Review, on this move. Nothing is uploaded: the moves are in the link itself.'
+        : `The link opens this position${d.moves.length ? ' and line' : ''} on the analysis board. Nothing is uploaded: it is all in the link.`;
+    $('#shareUrl').value = d.url;
+    $('#shareNative').hidden = !navigator.share;
+    $('#shareCopyMoves').hidden = !d.moves.length;
+    $('#shareDownload').hidden = d.kind === 'online' && !d.moves.length;
+    const dlg = $('#dlgShare');
+    if (!dlg.open) dlg.showModal();
+  }
+
+  function shareGameFile(d) {
+    const game = { fen: d.fen, moves: d.moves, white: d.white, black: d.black, result: d.result, date: d.date, link: d.kind === 'online' ? d.url : Share.shareUrl(location.href, 'review', { ...d, at: undefined }) };
+    return { name: Share.fileName(game), text: Share.gameText(game) };
+  }
+
+  // A toast would sit under the open dialog, so the sheet's buttons say "Copied" themselves.
+  function flash(btn, text) {
+    clearTimeout(btn.flashTimer);
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    btn.textContent = text;
+    btn.flashTimer = setTimeout(() => (btn.textContent = btn.dataset.label), 1600);
+  }
+  function copyFromSheet(btn, text) {
+    if (!navigator.clipboard) return flash(btn, 'Select and copy');
+    navigator.clipboard.writeText(text).then(() => flash(btn, 'Copied'), () => flash(btn, 'Could not copy'));
+  }
+  $('#shareCopyLink').onclick = e => {
+    $('#shareUrl').select();
+    copyFromSheet(e.currentTarget, $('#shareUrl').value);
+  };
+  $('#shareCopyFen').onclick = e => {
+    const d = shareData;
+    copyFromSheet(e.currentTarget, buildPosition(d.fen, d.moves.slice(0, d.at ?? d.moves.length)).fen());
+  };
+  $('#shareCopyMoves').onclick = e => {
+    const d = shareData;
+    copyFromSheet(e.currentTarget, d.fen === START_FEN ? d.moves.join(' ') : `${d.fen} moves ${d.moves.join(' ')}`);
+  };
+  $('#shareDownload').onclick = e => {
+    const f = shareGameFile(shareData);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([f.text], { type: 'text/plain' }));
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    flash(e.currentTarget, 'Downloaded');
+  };
+  $('#shareNative').onclick = async () => {
+    const d = shareData;
+    try {
+      await navigator.share({ title: 'Maki', text: `${$('#shareTitle').textContent.replace(/^Share /, 'Look at ')}: ${shareSummary(d)}`, url: d.url });
+      $('#dlgShare').close();
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      // Some browsers refuse a share from an embedded page: fall back to copying the link.
+      copyFromSheet($('#shareNative'), d.url);
+    }
+  };
+
+  // Opens what Share.read found: the analysis board, a review, an online game or a page.
+  // Returns true when there was something to open.
+  function openImported(r, { quiet = false } = {}) {
+    if (!r) return false;
+    if (r.error) {
+      toast(r.error);
+      return false;
+    }
+    if (r.kind === 'online') {
+      location.hash = `#/online/${r.id}`;
+      return true;
+    }
+    if (r.kind === 'route') {
+      location.hash = r.hash;
+      return true;
+    }
+    if (r.kind === 'review' && r.moves.length) {
+      // The same game opened twice is one saved game, not two.
+      let h = 0;
+      for (const ch of `${r.fen}|${r.moves.join(' ')}|${r.white || ''}|${r.black || ''}`) h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
+      const g = {
+        id: `imp${(h >>> 0).toString(36)}`,
+        mode: 'import',
+        startFen: r.fen,
+        moves: r.moves.slice(),
+        white: r.white || 'White',
+        black: r.black || 'Black',
+        result: r.result || statusToResult(buildPosition(r.fen, r.moves).status()),
+        date: r.date || Date.now(),
+      };
+      saveGame(g);
+      review.load(g);
+      if (r.at !== undefined) review.go(r.at);
+      location.hash = '#/review';
+      if (!quiet) toast('Game imported');
+      return true;
+    }
+    analysis.load(r.fen, r.moves, r.at ?? r.moves.length);
+    if (location.hash !== '#/analysis') location.hash = '#/analysis';
+    if (!quiet) toast(r.moves.length ? 'Position and moves imported' : 'Position imported');
+    return true;
+  }
+
+  // A move list or position with moves, opened in review rather than on the analysis board.
+  function asReview(r) {
+    return r && !r.error && r.kind === 'analysis' && r.moves.length ? { ...r, kind: 'review', at: r.at } : r;
+  }
+
+  function importText(text, opts) {
+    const r = Share.read(text);
+    if (!r) {
+      toast('Nothing to import there: paste a Maki link, a game file, a position or a move list.');
+      return false;
+    }
+    return openImported(r, opts);
+  }
+
+  async function readFile(file) {
+    if (file.size > 1e6) throw new Error('That file is too big to be a Maki game.');
+    return file.text();
+  }
+
+  // The import dialog: paste, pick a file, or read the clipboard.
+  function openImport() {
+    $('#importText').value = '';
+    $('#importDlgError').hidden = true;
+    $('#importPasteBtn').hidden = !(navigator.clipboard && navigator.clipboard.readText);
+    $('#dlgImport').showModal();
+    $('#importText').focus();
+  }
+  function importDialogText(text) {
+    const r = Share.read(text);
+    const err = $('#importDlgError');
+    if (!r || r.error) {
+      err.textContent = r ? r.error : 'That is not a Maki link, game file, position or move list.';
+      err.hidden = false;
+      return;
+    }
+    $('#dlgImport').close();
+    openImported(r);
+  }
+  $('#importGo').onclick = () => importDialogText($('#importText').value);
+  $('#importPasteBtn').onclick = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      $('#importText').value = text;
+      importDialogText(text);
+    } catch {
+      $('#importDlgError').textContent = 'The browser would not read the clipboard: paste into the box instead.';
+      $('#importDlgError').hidden = false;
+    }
+  };
+  $('#importFileBtn').onclick = () => $('#importFile').click();
+  $('#importFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const text = await readFile(f);
+      if ($('#dlgImport').open) {
+        $('#importText').value = text;
+        importDialogText(text);
+      } else {
+        const r = Share.read(text);
+        if (!r) toast('That file holds no Maki game or position.');
+        else openImported(location.hash === '#/review' ? asReview(r) : r);
+      }
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+
+  // Paste anywhere that is not a text box imports straight away.
+  document.addEventListener('paste', e => {
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (document.querySelector('dialog[open]')) return;
+    const text = e.clipboardData && e.clipboardData.getData('text');
+    const r = text && Share.read(text);
+    if (!r) return;
+    e.preventDefault();
+    openImported(r);
+  });
+
+  // Drop a game file, a link or a position anywhere on the page.
+  let dragDepth = 0;
+  const draggable = e => {
+    const t = e.dataTransfer && Array.from(e.dataTransfer.types || []);
+    return t && (t.includes('Files') || t.includes('text/plain') || t.includes('text/uri-list'));
+  };
+  document.addEventListener('dragenter', e => {
+    if (!draggable(e) || document.querySelector('dialog[open]')) return;
+    dragDepth++;
+    document.body.classList.add('dropping');
+  });
+  document.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) document.body.classList.remove('dropping');
+  });
+  document.addEventListener('dragover', e => {
+    if (draggable(e) && !document.querySelector('dialog[open]')) e.preventDefault();
+  });
+  document.addEventListener('drop', async e => {
+    dragDepth = 0;
+    document.body.classList.remove('dropping');
+    if (!draggable(e) || document.querySelector('dialog[open]')) return;
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) {
+      // Dropped text imports only when it reads as a game or position, so text dragged about
+      // the page by accident does nothing.
+      const r = Share.read(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
+      if (!r) return;
+      e.preventDefault();
+      openImported(r);
+      return;
+    }
+    e.preventDefault();
+    try {
+      importText(await readFile(f));
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+
   // --- dialogs ----------------------------------------------------------------------------
 
   let pveFen = null; // a start position other than the usual one, from the analysis board
@@ -2331,6 +2606,16 @@
 
   function route() {
     const h = location.hash || '#/';
+    // A shared link: open what it holds, then drop it from the address bar so a reload or
+    // the back button does not import it again over later work.
+    const shared = /^#\/(analysis|review)\?/.exec(h);
+    if (shared) {
+      history.replaceState(null, '', `${location.pathname}${location.search}#/${shared[1]}`);
+      const r = Share.read(h);
+      if (!r || r.error) toast(r ? r.error : 'That link does not read right.');
+      else openImported(r, { quiet: true });
+      return route();
+    }
     const online = /^#\/online\/([a-z0-9]+)$/.exec(h);
     if (online) {
       showView('play');
@@ -2448,6 +2733,30 @@
     // Online play needs web/server.js, or the shared database of a claude.ai Artifact.
     window.addEventListener('hashchange', route);
     renderRecent();
+
+    // Shared to the installed app from another app (the manifest's share_target): the text,
+    // link and title arrive as query parameters. Import what they hold and tidy the address.
+    const q = new URLSearchParams(location.search);
+    if (q.has('text') || q.has('url') || q.has('title')) {
+      const incoming = [q.get('url'), q.get('text'), q.get('title')].filter(Boolean);
+      history.replaceState(null, '', `${location.pathname}${location.hash || '#/'}`);
+      const r = incoming.map(t => Share.read(t)).find(x => x) || null;
+      if (r) setTimeout(() => openImported(r), 0);
+      else toast('Nothing to import in what was shared.');
+    }
+    // A game file opened with the installed app (the manifest's file_handlers).
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async params => {
+        for (const h of params.files || []) {
+          try {
+            importText(await readFile(await h.getFile()));
+          } catch (err) {
+            toast(err.message);
+          }
+          break;
+        }
+      });
+    }
     const pendingOnline = /^#\/online\//.test(location.hash);
     if (!pendingOnline) route();
     window.Online.detect(store).then(b => {
