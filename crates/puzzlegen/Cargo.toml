@@ -1,0 +1,11 @@
+[package]
+name = "sk-puzzlegen"
+version.workspace = true
+edition.workspace = true
+description = "Finds middlegame tactic puzzles in self-play games and verifies them with a network"
+
+[dependencies]
+sk-core = { path = "../core" }
+sk-search = { path = "../search" }
+sk-nnue = { path = "../nnue" }
+sk-eval = { path = "../eval" }

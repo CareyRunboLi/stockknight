@@ -33,6 +33,8 @@ jobs:
         run: web/build-wasm.sh
       - name: Test it
         run: node web/test-wasm.js
+      - name: Check the Train data
+        run: node web/test-train.js
       - name: Assemble the site
         env:
           MAKI_SERVER_URL: ${{ vars.MAKI_SERVER_URL }}

@@ -7,6 +7,7 @@
   <meta name="description" content="Play Maki, the 6×6 drop game, against the Stockhorse engine or a friend, and review your games move by move.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="train.css">
 </head>
 <body>
   <header class="topbar">
@@ -17,6 +18,7 @@
     <nav class="nav">
       <a href="#/" data-nav="home">Play</a>
       <a href="#/learn" data-nav="learn">Learn</a>
+      <a href="#/train" data-nav="train">Train</a>
       <a href="#/analysis" data-nav="analysis">Analysis</a>
       <a href="#/review" data-nav="review">Review</a>
       <a href="#/rules" data-nav="rules">Rules</a>
@@ -64,6 +66,11 @@
           <span class="mode-icon" data-piece="K"></span>
           <span class="mode-title">Analysis board</span>
           <span class="mode-sub">Set up any position, try moves for both sides and see Stockhorse's best lines.</span>
+        </button>
+        <button class="mode-card" data-mode="train">
+          <span class="mode-icon" data-piece="P"></span>
+          <span class="mode-title">Train</span>
+          <span class="mode-sub">Named openings to learn, and hundreds of middlegame tactics and endgames to solve.</span>
         </button>
         <button class="mode-card" data-mode="review">
           <span class="mode-icon" data-piece="B"></span>
@@ -297,6 +304,8 @@
         </aside>
       </div>
     </section>
+    <!-- Train: built by train.js ------------------------------------------------------------ -->
+    <section class="view" id="view-train" hidden></section>
 
     <!-- Rules ------------------------------------------------------------------------------ -->
     <section class="view" id="view-rules" hidden>
@@ -464,6 +473,10 @@
   <script src="online.js"></script>
   <script src="lessons.js"></script>
   <script src="tutorial.js"></script>
+  <script src="train/openings.js"></script>
+  <script src="train/tactics.js"></script>
+  <script src="train/endgames.js"></script>
+  <script src="train.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
