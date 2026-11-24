@@ -11,6 +11,7 @@ node web/server.js            # http://localhost:8080/  (all features, including
 node web/server.js --data rooms.json   # the same, keeping games across restarts
 python3 -m http.server        # from the repo root, then open /web/  (everything but online games)
 node web/test.js              # engine tasks, analysis lines and move tree, review classification, online server
+node web/test-tutorial.js     # every Learn lesson position is legal and every exercise solvable
 node web/calibrate.js         # re-measure the Elo of each strength setting (see docs/STRENGTH.md)
 ```
 
@@ -23,8 +24,27 @@ node web/calibrate.js         # re-measure the Elo of each strength setting (see
 | Online | See [Online play](#online-play) below |
 | Moving | Click or drag a piece. To drop, click a piece in your reserve (beside the board), then a highlighted square. A reserve piece is only clickable when it has a legal drop |
 | Analysis board | See [Analysis board](#analysis-board) below |
+| Learn | See [Learn](#learn) below |
 | Game review | Every position is searched with a full window for every legal move, so each played move has an exact score at the same depth as the best move. Review time per position: Quick 0.25 s, Standard 0.7 s, Deep 1.8 s |
 | Saved games | The last 40 finished or reviewed games are kept in the browser (`localStorage`). Move lists can be copied and pasted back in for review |
+
+## Learn
+
+`#/learn`, from the Learn link in the top bar or the banner on the home page: 15 lessons for
+complete beginners in four parts (the pieces; captures and drops; check, mate and stalemate;
+playing well), 55 steps in all. A step is either text beside a position, or an exercise played
+as White on the board:
+
+| Exercise | Solved when |
+|---|---|
+| Stars | Every star has been visited. Black passes, so the learner keeps the move |
+| Capture | Every black piece but the king has been taken, Black passing as above |
+| One move | The move gives check, checkmate or stalemate; escapes check in the asked way (king move, capture or block); attacks the named pieces (with a drop of the named type, if given); or is one of the listed moves. A wrong move is shown, explained and taken back |
+
+Hint explains the idea and, for one-move exercises, draws an arrow to an answer the rules engine
+found. Progress (lessons done, the step reached in each) is kept in the browser. The lessons are
+data in `web/lessons.js`; `web/tutorial.js` runs them with the reference engine, and
+`web/test-tutorial.js` checks every position and solves every exercise.
 
 ## Analysis board
 
