@@ -9,8 +9,8 @@ OUT=${1:-_site}
 rm -rf "$OUT"
 mkdir -p "$OUT/reference" "$OUT/engine" "$OUT/nets" "$OUT/train"
 for f in index.html style.css favicon.svg app.js config.js endgame.js engine-tasks.js \
-         engine-worker.js online.js pieces.js review.js tree.js wasm-engine.js train.js train.css \
-         train/openings.js train/tactics.js train/endgames.js; do
+         engine-worker.js online.js pieces.js review.js tree.js wasm-engine.js lessons.js tutorial.js \
+         train.js train.css train/openings.js train/tactics.js train/endgames.js; do
   cp "web/$f" "$OUT/$f"
 done
 cp reference/engine.js "$OUT/reference/engine.js"

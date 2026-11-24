@@ -12,6 +12,7 @@ node web/server.js --data rooms.json   # the same, keeping games across restarts
 python3 -m http.server        # from the repo root, then open /web/  (everything but online games)
 node web/test-train.js        # the Train section's openings and puzzles against the rules
 node web/test.js              # engine tasks, analysis lines and move tree, review classification, online server
+node web/test-tutorial.js     # every Learn lesson position is legal and every exercise solvable
 node web/calibrate.js         # re-measure the Elo of each strength setting (see docs/STRENGTH.md)
 ```
 
@@ -24,9 +25,28 @@ node web/calibrate.js         # re-measure the Elo of each strength setting (see
 | Online | See [Online play](#online-play) below |
 | Moving | Click or drag a piece. To drop, click a piece in your reserve (beside the board), then a highlighted square. A reserve piece is only clickable when it has a legal drop |
 | Analysis board | See [Analysis board](#analysis-board) below |
+| Learn | See [Learn](#learn) below |
 | Train | `#/train`: named openings to study and practise, 367 middlegame tactics and 270 tablebase endgames with levels, hints, explanations and a training rating. See [TRAIN.md](TRAIN.md) |
 | Game review | Every position is searched with a full window for every legal move, so each played move has an exact score at the same depth as the best move. Review time per position: Quick 0.25 s, Standard 0.7 s, Deep 1.8 s |
 | Saved games | The last 40 finished or reviewed games are kept in the browser (`localStorage`). Move lists can be copied and pasted back in for review |
+
+## Learn
+
+`#/learn`, from the Learn link in the top bar or the banner on the home page: 15 lessons for
+complete beginners in four parts (the pieces; captures and drops; check, mate and stalemate;
+playing well), 55 steps in all. A step is either text beside a position, or an exercise played
+as White on the board:
+
+| Exercise | Solved when |
+|---|---|
+| Stars | Every star has been visited. Black passes, so the learner keeps the move |
+| Capture | Every black piece but the king has been taken, Black passing as above |
+| One move | The move gives check, checkmate or stalemate; escapes check in the asked way (king move, capture or block); attacks the named pieces (with a drop of the named type, if given); or is one of the listed moves. A wrong move is shown, explained and taken back |
+
+Hint explains the idea and, for one-move exercises, draws an arrow to an answer the rules engine
+found. Progress (lessons done, the step reached in each) is kept in the browser. The lessons are
+data in `web/lessons.js`; `web/tutorial.js` runs them with the reference engine, and
+`web/test-tutorial.js` checks every position and solves every exercise.
 
 ## Analysis board
 
@@ -39,6 +59,7 @@ node web/calibrate.js         # re-measure the Elo of each strength setting (see
 | Moves | Moves and drops for both sides, by click or drag. Every move tried is kept in a tree: a new move from an earlier position starts a variation, shown indented under the move it replaces. Click any move to go there; ←, →, Home and End step through the line, F flips the board. **Make main line** promotes the current line, **Delete from here** removes the current move and what follows |
 | Stockhorse | The best 1, 2, 3 or 5 moves with their scores and lines (MultiPV), an eval bar, and arrows for the top three moves. The search deepens in steps (0.25 s, 0.7 s, 1.8 s, 4.5 s, 12 s) on its own Web Worker and keeps its hash table between steps; moving on restarts it. Click a move in a line to play the line up to it. The switch turns the engine off |
 | Play from here | Opens the opponent picker and starts a game against Stockhorse from the current position. Such games save and review like any other |
+| Play online from here | Opens the online dialog with the current position as the starting position, so a friend can play it out with you. See [Online play](#online-play) |
 | Endgame table | When one side has a king and one or two bishops or knights against a bare king, with empty reserves, `web/endgame.js` solves the ending exactly (a few seconds the first time, in its own Web Worker) and shows who wins, in how many moves, and the exact value of every legal move; its best moves get the arrows. **Lone-piece endings** sets up the longest king-and-bishop, king-and-knight and king-and-two-knights positions. Why a lone bishop or knight never mates, and how to win anyway: [ENDGAMES.md](ENDGAMES.md) |
 | Remembered | The tree and the current move are kept in the browser, so the board is as you left it next time |
 
@@ -56,6 +77,7 @@ players and any watchers over server-sent events.
 |---|---|
 | Quick pairing | Pick a time control and press Quick pairing. You join the oldest waiting player at the same time control, or you wait and your game shows under Open challenges for others. A waiting game only counts while its player is connected, and two tabs of the same browser are never paired together |
 | Invite link | Make an invite link (pick White, Black or random) and send it. The first visitor takes the free seat; anyone after that watches |
+| Start from a position | In the online dialog, Starting position: From a position takes a position string (FEN, as in [RULES.md](RULES.md)), shows it on a small board, and says what is wrong if it is not a legal position or the game is already over. **Set up on the board** opens the analysis board's editor; **Play online from here** there brings the position back. These games are by invite only (quick pairing always uses the usual start), show as "set-up position" in the lobby, and a rematch starts from the same position. The server checks the position (`fen` in `POST /api/rooms`) and every move from it; the room state carries it as `startFen` |
 | Lobby | The online dialog lists open challenges and live games to watch, refreshed every 3 s |
 | Time controls | 1 min, 3 \| 2, 5 min, 10 \| 5, 15 \| 10 or untimed. Clocks start after both sides have made their first move; each side has 30 s for its first move or the game is aborted. The increment is added after every timed move. Running out of time loses, unless the opponent has only a king and an empty reserve, which is a draw |
 | Draws | Offer a draw after your first move. Your opponent accepts or declines; making a move also declines it. Repetition and bare kings end the game as usual |

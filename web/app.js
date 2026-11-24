@@ -787,9 +787,9 @@
 
     // --- online ---
 
-    async createRoom(color) {
+    async createRoom(color, fen = null) {
       try {
-        const id = await backend.create({ color, tc: chosenTc(), name: store.get('sk.name', '') });
+        const id = await backend.create({ color, tc: chosenTc(), name: store.get('sk.name', ''), fen });
         location.hash = `#/online/${id}`;
       } catch (err) {
         toast(`Could not make a game: ${err.message}`);
@@ -875,6 +875,13 @@
       g.white = this.seatName('w', st);
       g.black = this.seatName('b', st);
       g.tc = st.tc || null;
+      const startFen = st.startFen || START_FEN;
+      if (startFen !== g.startFen) {
+        // A game from a set-up position: start over from it.
+        g.startFen = startFen;
+        g.moves = [];
+        this.pos = new Position(startFen);
+      }
       const same = st.moves.length >= g.moves.length && g.moves.every((u, i) => st.moves[i] === u);
       const before = g.moves.length;
       if (same) {
@@ -1511,6 +1518,10 @@
         copyText(text, 'Moves copied');
       };
       $('#aPlayHere').onclick = () => openPveDialog(this.tree.position(this.cur).fen());
+      $('#aPlayOnline').onclick = () => {
+        if (!backend) return toast('Online play is not available here');
+        openOnlineDialog(this.tree.position(this.cur).fen());
+      };
       $('#aLesson').onchange = () => {
         const fen = $('#aLesson').value;
         $('#aLesson').value = '';
@@ -2157,15 +2168,97 @@
     play.start({ mode: 'pve', elo, color, fen: pveFen });
   });
 
+  // The online dialog's start position: null for the usual one, or a FEN.
+  let onlineFen = null;
+
+  function miniBoard(pos) {
+    const cells = [];
+    for (let rank = 5; rank >= 0; rank--) {
+      for (let file = 0; file < 6; file++) {
+        const code = pos.board[rank * 6 + file];
+        cells.push(`<div class="${(file + rank) % 2 ? 'light' : 'dark'}">${code ? pieceSvg(LETTERS[code & 7], code >> 3 ? 'b' : 'w') : ''}</div>`);
+      }
+    }
+    return cells.join('');
+  }
+
+  function reserveText(pos, c) {
+    const parts = DROP_ORDER.filter(t => pos.hand[c][t]).map(t => {
+      const n = pos.hand[c][t], name = window.Pieces.NAMES[LETTERS[t]];
+      return `${n} ${name}${n > 1 ? 's' : ''}`;
+    });
+    return parts.length ? parts.join(', ') : 'nothing';
+  }
+
+  // Shows the start-position part of the online dialog. A custom FEN is checked the way the
+  // server checks it; an unusable one keeps the invite button off.
+  function renderOnlineFen() {
+    const custom = $('#ofenSeg input:checked').value === 'custom';
+    $('#ofenWrap').hidden = !custom;
+    const f = (backend && backend.features) || {};
+    $('#quickWrap').hidden = !f.quick || custom;
+    const invite = $('#dlgOnline button[value=ok]');
+    if (!custom) {
+      invite.disabled = false;
+      invite.textContent = 'Make an invite link';
+      return;
+    }
+    invite.textContent = 'Make an invite link from this position';
+    const text = $('#ofenInput').value.trim();
+    const fen = text ? window.Online.cleanFen(text) : null;
+    let error = '';
+    if (!text) error = 'Paste a position, or set one up on the board.';
+    else if (!fen) {
+      try {
+        const st = new Position(text).status();
+        error = st.state === 'ongoing' ? 'That position cannot start a game.' : `That game is already over (${st.reason}).`;
+      } catch (err) {
+        error = `Not a valid position: ${err.message.replace(/: [^:]*$/, '').replace(/^bad FEN:? ?/, '')}.`;
+      }
+    }
+    $('#ofenError').hidden = !error;
+    $('#ofenError').textContent = error;
+    invite.disabled = !!error;
+    if (fen) {
+      const pos = new Position(fen);
+      onlineFen = fen === START_FEN ? null : fen;
+      $('#ofenBoard').innerHTML = miniBoard(pos);
+      $('#ofenInfo').innerHTML = `<b>${colorName(pos.side)} to move.</b><br>White's reserve: ${esc(reserveText(pos, WHITE))}.<br>Black's reserve: ${esc(reserveText(pos, BLACK))}.`;
+    } else {
+      onlineFen = null;
+      $('#ofenBoard').innerHTML = '';
+      $('#ofenInfo').textContent = '';
+    }
+  }
+
+  $('#ofenSeg').addEventListener('change', renderOnlineFen);
+  $('#ofenInput').addEventListener('input', renderOnlineFen);
+  $('#ofenSetup').addEventListener('click', () => {
+    $('#dlgOnline').close('setup');
+    const fen = $('#ofenInput').value.trim();
+    location.hash = '#/analysis';
+    route();
+    if (fen && window.Online.cleanFen(fen)) analysis.load(fen);
+    analysis.openEditor();
+    toast('Set up the position, press Done, then Play online from here');
+  });
+
   let openGamesUnsub = null;
-  function openOnlineDialog() {
+  function openOnlineDialog(fen = null) {
     const dlg = $('#dlgOnline');
     dlg.returnValue = '';
+    if (fen && fen !== START_FEN) {
+      $('#ofenInput').value = fen;
+      $$('#ofenSeg input').forEach(i => (i.checked = i.value === 'custom'));
+    } else if (fen === START_FEN) {
+      $$('#ofenSeg input').forEach(i => (i.checked = i.value === 'std'));
+    }
+    dlg.querySelector('h2').textContent = fen && fen !== START_FEN ? 'Play online from this position' : 'Play online';
     $('#joinCode').value = '';
     $('#onlineName').value = store.get('sk.name', '');
     const f = (backend && backend.features) || {};
     $('#tcWrap').hidden = !f.clocks;
-    $('#quickWrap').hidden = !f.quick;
+    renderOnlineFen();
     const lastTc = store.get('sk.tc', '300+0');
     const tcInput = $$('#tcSeg input').find(i => i.value === lastTc);
     if (tcInput) tcInput.checked = true;
@@ -2174,7 +2267,7 @@
     if (f.lobby && !openGamesUnsub) {
       openGamesUnsub = backend.lobby(({ open, live }) => {
         const by = r => (r.name ? ` · ${esc(r.name)}` : '');
-        const tc = r => (backend.features.clocks ? ` · ${esc(tcLabel(r.tc))}` : '');
+        const tc = r => (backend.features.clocks ? ` · ${esc(tcLabel(r.tc))}` : '') + (r.custom ? ' · set-up position' : '');
         $('#openGames').innerHTML = open.length
           ? open.map(r => `<li><button type="button" class="btn" data-join="${esc(r.id)}">${r.mine ? 'Back to your game' : `Play as ${r.open === 'w' ? 'White' : 'Black'}`}
               <span class="muted">${tc(r)}${by(r)} · ${esc(r.id)}</span></button></li>`).join('')
@@ -2213,7 +2306,8 @@
     }
     if (dlg.returnValue === 'quick') return play.quickPair();
     if (dlg.returnValue !== 'ok') return;
-    play.createRoom(dlg.querySelector('input[name=ocolor]:checked').value);
+    const custom = $('#ofenSeg input:checked').value === 'custom';
+    play.createRoom(dlg.querySelector('input[name=ocolor]:checked').value, custom ? onlineFen : null);
   });
 
   $('#onlineActions').addEventListener('click', e => {
@@ -2229,7 +2323,7 @@
   // --- routing ----------------------------------------------------------------------------
 
   function showView(name) {
-    for (const v of ['home', 'play', 'review', 'analysis', 'rules', 'train']) $(`#view-${v}`).hidden = v !== name;
+    for (const v of ['home', 'play', 'review', 'analysis', 'rules', 'learn', 'train']) $(`#view-${v}`).hidden = v !== name;
     if (name !== 'analysis' && analysis.active) analysis.hide();
     if (name !== 'train' && window.Train) window.Train.hide();
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name || (name === 'play' && a.dataset.nav === 'home')));
@@ -2255,6 +2349,9 @@
       analysis.show();
     } else if (h === '#/rules') {
       showView('rules');
+    } else if (/^#\/learn(\/[a-z0-9-]+)?$/.test(h)) {
+      showView('learn');
+      window.Tutorial.show(h.split('/')[2]);
     } else if (/^#\/train(\/|$)/.test(h)) {
       showView('train');
       window.Train.show(h);
@@ -2306,11 +2403,21 @@
     };
     $('#brandMark').innerHTML = pieceSvg('N', 'w');
     $('#heroArt').innerHTML = heroArt();
-    $$('.mode-icon').forEach(el => (el.innerHTML = pieceSvg(el.dataset.piece, 'w')));
+    $$('.mode-icon, .learn-banner-icon').forEach(el => (el.innerHTML = pieceSvg(el.dataset.piece, 'w')));
 
     play.init();
     review.init();
     analysis.init();
+    window.Tutorial.init({
+      BoardView,
+      pieceSvg,
+      toast,
+      openPve: () => openPveDialog(),
+      playLocal: () => {
+        location.hash = '#/play';
+        play.start({ mode: 'local' });
+      },
+    });
     window.Train.init({
       $, $$, esc, pieceSvg, store, toast, BoardView,
       openAnalysis(fen, moves, at) {

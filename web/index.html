@@ -17,6 +17,7 @@
     </a>
     <nav class="nav">
       <a href="#/" data-nav="home">Play</a>
+      <a href="#/learn" data-nav="learn">Learn</a>
       <a href="#/train" data-nav="train">Train</a>
       <a href="#/analysis" data-nav="analysis">Analysis</a>
       <a href="#/review" data-nav="review">Review</a>
@@ -38,6 +39,12 @@
         </div>
         <div class="hero-art" id="heroArt" aria-hidden="true"></div>
       </div>
+
+      <a class="learn-banner" href="#/learn">
+        <span class="learn-banner-icon" data-piece="P" aria-hidden="true"></span>
+        <span class="learn-banner-text"><b>New to Maki?</b> Learn to play in 15 short lessons, with exercises on the board. No chess needed.</span>
+        <span class="btn primary">Start learning</span>
+      </a>
 
       <div class="modes">
         <button class="mode-card" data-mode="pve">
@@ -229,6 +236,7 @@
               <option value="6/6/6/2NN2/2k3/K5[-] w 0 1">King and two knights v king</option>
             </select>
             <button class="btn primary" id="aPlayHere" title="Play Stockhorse from this position">Play from here</button>
+            <button class="btn" id="aPlayOnline" title="Start an online game from this position">Play online from here</button>
           </div>
         </aside>
 
@@ -256,6 +264,46 @@
       </div>
     </section>
 
+    <!-- Learn ------------------------------------------------------------------------------ -->
+    <section class="view" id="view-learn" hidden>
+      <div id="learnIndex">
+        <div class="learn-hero">
+          <p class="eyebrow">Learn · from zero</p>
+          <h1>Learn to play Maki</h1>
+          <p class="lede">Short lessons for complete beginners: how every piece moves, drops, check and checkmate, and why stalemate wins. Each lesson ends with exercises on a real board.</p>
+          <div class="learn-progress" id="learnProgress"></div>
+        </div>
+        <div id="learnChapters"></div>
+      </div>
+
+      <div class="arena" id="learnLesson" hidden>
+        <div class="board-col">
+          <div class="player-bar" id="lBarTop"></div>
+          <div class="board-wrap">
+            <div class="board" id="lBoard"></div>
+          </div>
+          <div class="player-bar" id="lBarBottom"></div>
+        </div>
+        <aside class="panel learn-panel">
+          <div class="learn-head" id="lHead"></div>
+          <div class="tut-pips" id="lDots"></div>
+          <div class="tut-goal" id="lGoal" hidden></div>
+          <div class="tut-text" id="lText"></div>
+          <div class="tut-feedback" id="lFeedback" role="status" aria-live="polite" hidden></div>
+          <div class="controls" id="lEnd" hidden>
+            <button class="btn primary" id="lPlayBot">Play Stockhorse</button>
+            <button class="btn" id="lPlayLocal">Pass and play</button>
+          </div>
+          <div class="controls">
+            <button class="btn" id="lPrev">← Back</button>
+            <button class="btn" id="lHint">Hint</button>
+            <button class="btn" id="lRetry">Try again</button>
+            <button class="btn primary" id="lNext">Next →</button>
+          </div>
+          <button class="linkish" id="lSkip" hidden>Skip this exercise</button>
+        </aside>
+      </div>
+    </section>
     <!-- Train: built by train.js ------------------------------------------------------------ -->
     <section class="view" id="view-train" hidden></section>
 
@@ -296,6 +344,7 @@
           <li>The analysis board knows every such position exactly: set one up, or pick one from <b>Lone-piece endings</b>, to see the result of every move.</li>
         </ul>
         <p class="muted">To drop, click a piece in your reserve (beside the board) and then an empty square.</p>
+        <p>New to the game? The <a href="#/learn">Learn</a> section teaches all of this step by step, with exercises on the board.</p>
       </article>
     </section>
   </main>
@@ -355,6 +404,25 @@
         <button class="btn primary" value="quick">Quick pairing</button>
         <span class="muted" id="quickNote">Plays the next person who picks the same time control.</span>
       </div>
+      <h3>Starting position</h3>
+      <div class="seg" id="ofenSeg">
+        <label><input type="radio" name="ofen" value="std" checked><span>Standard</span></label>
+        <label><input type="radio" name="ofen" value="custom"><span>From a position</span></label>
+      </div>
+      <div class="ofen" id="ofenWrap" hidden>
+        <div class="ofen-row">
+          <div class="mini-board" id="ofenBoard" aria-label="The starting position"></div>
+          <div class="ofen-side">
+            <p class="ofen-info" id="ofenInfo"></p>
+            <button class="btn" type="button" id="ofenSetup">Set up on the board…</button>
+          </div>
+        </div>
+        <label class="field">Position (FEN)
+          <input id="ofenInput" spellcheck="false" autocomplete="off" placeholder="e.g. 6/6/6/2NN2/2k3/K5[-] w 0 1">
+        </label>
+        <p class="error" id="ofenError" hidden></p>
+        <p class="muted ofen-note">Games from a set-up position are by invite only: send the link to your opponent.</p>
+      </div>
       <h3>Invite a friend, playing as</h3>
       <div class="quick-row">
         <div class="seg">
@@ -403,6 +471,8 @@
   <script src="tree.js"></script>
   <script src="pieces.js"></script>
   <script src="online.js"></script>
+  <script src="lessons.js"></script>
+  <script src="tutorial.js"></script>
   <script src="train/openings.js"></script>
   <script src="train/tactics.js"></script>
   <script src="train/endgames.js"></script>
