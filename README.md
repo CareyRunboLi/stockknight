@@ -34,7 +34,7 @@ trained network G1 (Phase 3) and fast quantized network inference (Phase 4) foll
 | `crates/tb` (`sk-tb`) | Endgame tablebases: exact results and distance to the end by retrograde analysis (`docs/TABLEBASES.md`) |
 | `python/skpy` | Record loading, the PyTorch trainer, league maths and the generation loop (`docs/LEAGUE.md`) |
 | `python/skpy/harness`, `./sk`, `configs/` | The training harness: resumable runs, configs, status, reports, dashboard, doctor, smoke (`docs/HARNESS.md`) |
-| `web/` | The play website: PvE against four engine levels, pass-and-play, online rooms, game review (`docs/WEB.md`) |
+| `web/` | The play website: PvE against four engine levels, pass-and-play, online rooms, game review, beginner lessons (`docs/WEB.md`) |
 | `docs/ENDGAMES.md`, `web/endgame.js` | Which lone pieces can checkmate (proofs and winning methods), and the exact solver for those endings |
 
 ```sh

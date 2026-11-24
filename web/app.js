@@ -2229,7 +2229,7 @@
   // --- routing ----------------------------------------------------------------------------
 
   function showView(name) {
-    for (const v of ['home', 'play', 'review', 'analysis', 'rules']) $(`#view-${v}`).hidden = v !== name;
+    for (const v of ['home', 'play', 'review', 'analysis', 'rules', 'learn']) $(`#view-${v}`).hidden = v !== name;
     if (name !== 'analysis' && analysis.active) analysis.hide();
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name || (name === 'play' && a.dataset.nav === 'home')));
   }
@@ -2254,6 +2254,9 @@
       analysis.show();
     } else if (h === '#/rules') {
       showView('rules');
+    } else if (/^#\/learn(\/[a-z0-9-]+)?$/.test(h)) {
+      showView('learn');
+      window.Tutorial.show(h.split('/')[2]);
     } else {
       showView('home');
       renderRecent();
@@ -2302,11 +2305,21 @@
     };
     $('#brandMark').innerHTML = pieceSvg('N', 'w');
     $('#heroArt').innerHTML = heroArt();
-    $$('.mode-icon').forEach(el => (el.innerHTML = pieceSvg(el.dataset.piece, 'w')));
+    $$('.mode-icon, .learn-banner-icon').forEach(el => (el.innerHTML = pieceSvg(el.dataset.piece, 'w')));
 
     play.init();
     review.init();
     analysis.init();
+    window.Tutorial.init({
+      BoardView,
+      pieceSvg,
+      toast,
+      openPve: () => openPveDialog(),
+      playLocal: () => {
+        location.hash = '#/play';
+        play.start({ mode: 'local' });
+      },
+    });
 
     $$('.mode-card').forEach(card => {
       card.onclick = () => {
