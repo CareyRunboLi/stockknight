@@ -6,15 +6,16 @@
 //     referee there, so both browsers check every move, and games are untimed.
 //
 // backend.features: { clocks, quick, lobby, claim } (draw offers, abort and rematch work on both)
-// backend.create({ color, tc, name }) -> id          (tc: { base, inc } in seconds, or null)
+// backend.create({ color, tc, name, fen }) -> id     (tc: { base, inc } in seconds, or null;
+//                                                     fen: a start position, or null for the usual one)
 // backend.quick({ tc, name }) -> id                   (features.quick)
 // backend.subscribe(id, onUpdate, onError, onConn) -> unsubscribe
-//   onUpdate(state): { you: 'w'|'b'|null, moves, players, names, online, gone, tc, clock,
+//   onUpdate(state): { you: 'w'|'b'|null, startFen, moves, players, names, online, gone, tc, clock,
 //                      firstMove, drawOffer, rematch, next, result, watchers }
 //   onConn(true|false): the live connection is up / lost and retrying
 // backend.move(id, uci, ply), .resign(id), .abort(id), .draw(id, 'offer'|'accept'|'decline'),
 //   .claim(id), .rematch(id) -> Promise, rejecting with an Error to show
-// backend.lobby(onList) -> unsubscribe; onList({ open: [{ id, open, tc, name, mine }], live: [...] })
+// backend.lobby(onList) -> unsubscribe; onList({ open: [{ id, open, tc, name, mine, custom }], live: [...] })
 
 (function (root) {
   const SK = root.StockKnight;
@@ -27,6 +28,19 @@
     let id = '';
     for (const b of crypto.getRandomValues(new Uint8Array(6))) id += alphabet[b % alphabet.length];
     return id;
+  }
+
+  // A start position a game may begin from: the FEN as the engine writes it, START_FEN for none,
+  // or null when the position is not legal or already over. The server checks the same way.
+  function cleanFen(fen) {
+    if (fen === undefined || fen === null || fen === '') return SK.START_FEN;
+    if (typeof fen !== 'string' || fen.length > 120) return null;
+    try {
+      const pos = new SK.Position(fen);
+      return pos.status().state === 'ongoing' ? pos.fen() : null;
+    } catch {
+      return null;
+    }
   }
 
   function pickColor(color) {
@@ -59,8 +73,10 @@
     return {
       kind: 'server',
       features: { clocks: true, quick: true, lobby: true, claim: true },
-      async create({ color, tc, name }) {
-        const { id, token } = await post('/api/rooms', { color, tc, name, client });
+      async create({ color, tc, name, fen }) {
+        const body = { color, tc, name, client };
+        if (fen && fen !== SK.START_FEN) body.fen = fen;
+        const { id, token } = await post('/api/rooms', body);
         store.set(key(id), token);
         return id;
       },
@@ -146,16 +162,18 @@
   }
 
   // --- claude.ai Artifact shared database ---------------------------------------------------
-  // rooms/<code>: { w, b (viewer ids or null), names, moves: [uci], result, drawOffer,
+  // rooms/<code>: { w, b (viewer ids or null), names, fen (start position, or absent), moves: [uci], result, drawOffer,
   //                 rematch: { w, b }, next, created, updated }
   // Both browsers check every move with the reference engine before writing it.
 
   function dbBackend(db, me, store = { get: (k, d) => d }) {
     const ref = id => db.doc(`rooms/${id}`);
     const seat = (d, who) => (d.w === who ? 'w' : d.b === who ? 'b' : null);
+    const startOf = d => cleanFen(d.fen) || SK.START_FEN;
     const toUpdate = (id, d, you) => ({
       id,
       you,
+      startFen: startOf(d),
       moves: Array.isArray(d.moves) ? d.moves.filter(m => typeof m === 'string') : [],
       players: { w: !!d.w, b: !!d.b },
       names: d.names || { w: null, b: null },
@@ -190,13 +208,16 @@
     return {
       kind: 'db',
       features: { clocks: false, quick: false, lobby: true, claim: false },
-      async create({ color } = {}) {
+      async create({ color, fen } = {}) {
+        const start = cleanFen(fen);
+        if (!start) throw new Error('That position cannot start a game');
         const id = newCode();
         const c = pickColor(color);
         const now = Date.now();
         await ref(id).set({
           w: c === 'w' ? me : null, b: c === 'b' ? me : null,
           names: { w: c === 'w' ? name() : null, b: c === 'b' ? name() : null },
+          ...(start !== SK.START_FEN ? { fen: start } : {}),
           moves: [], result: null, drawOffer: null, rematch: { w: false, b: false }, next: null, created: now, updated: now,
         });
         return id;
@@ -226,7 +247,7 @@
       },
       async move(id, uci) {
         const { d, you } = await mine(id);
-        const pos = new SK.Position();
+        const pos = new SK.Position(startOf(d));
         for (const u of d.moves) pos.makeMove(pos.moveFromUci(u));
         if ((pos.side === SK.WHITE ? 'w' : 'b') !== you) throw new Error('Not your turn');
         const m = pos.moveFromUci(uci);
@@ -281,6 +302,7 @@
           const names = d.names || {};
           await ref(next).set({
             w: d.b, b: d.w, names: { w: names.b || null, b: names.w || null },
+            ...(startOf(d) !== SK.START_FEN ? { fen: startOf(d) } : {}),
             moves: [], result: null, drawOffer: null, rematch: { w: false, b: false }, next: null, created: now, updated: now,
           });
           await ref(id).update({ rematch, next, updated: now });
@@ -307,10 +329,11 @@
                   name: names(d)[d.w ? 'w' : 'b'],
                   moves: (d.moves || []).length,
                   tc: null,
+                  custom: startOf(d) !== SK.START_FEN,
                 })),
               live: rows
                 .filter(({ d }) => d.w && d.b && d.w !== me && d.b !== me && (d.moves || []).length)
-                .map(({ id, d }) => ({ id, names: names(d), moves: d.moves.length, tc: null })),
+                .map(({ id, d }) => ({ id, names: names(d), moves: d.moves.length, tc: null, custom: startOf(d) !== SK.START_FEN })),
             });
           },
           () => onList({ open: [], live: [] }),
@@ -338,5 +361,5 @@
     return null;
   }
 
-  root.Online = { detect, dbBackend, serverBackend };
+  root.Online = { detect, dbBackend, serverBackend, cleanFen };
 })(globalThis);

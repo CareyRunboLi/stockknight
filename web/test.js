@@ -685,6 +685,82 @@ test('online server: presence, reconnecting, claiming an abandoned game', async 
   });
 });
 
+test('online server: games from a set-up position, kept through rematch and restart', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'maki-'));
+  const dataFile = path.join(dir, 'rooms.json');
+  const fen = '5N/6/6/2k3/6/K5[-] b 0 1'; // Black (the lone king) moves first
+  let a, b;
+  await withServer({ dataFile }, async api => {
+    assert.equal((await api.post('/api/rooms', { color: 'w', fen: 'not a fen' })).status, 400);
+    assert.equal((await api.post('/api/rooms', { color: 'w', fen: '6/6/6/2k3/6/K5[-] w 0 1' })).status, 400, 'bare kings is already over');
+    assert.equal((await api.post('/api/rooms', { color: 'w', fen: 42 })).status, 400);
+    a = (await api.post('/api/rooms', { color: 'w', fen, tc: { base: 300, inc: 0 } })).body;
+    b = (await api.post(`/api/rooms/${a.id}/join`, {})).body;
+    let st = await api.get(`/api/rooms/${a.id}`);
+    assert.equal(st.startFen, fen);
+    assert.equal((await api.post(`/api/rooms/${a.id}/move`, { token: a.token, uci: 'a1a2' })).status, 409, 'Black moves first here');
+    assert.equal((await api.post(`/api/rooms/${a.id}/move`, { token: b.token, uci: 'c3c4' })).status, 200);
+    assert.equal((await api.post(`/api/rooms/${a.id}/move`, { token: a.token, uci: 'a1a2' })).status, 200);
+    // Quick pairing never lands in a game from a set-up position.
+    const c = (await api.post('/api/rooms', { color: 'w', fen, public: true, client: 'clientcccc' })).body;
+    const sc = await api.watch(c.id, c.token);
+    const lob = await api.get('/api/lobby');
+    assert.deepEqual(lob.open.map(g => [g.id, g.custom]), [[c.id, true]]);
+    const q = (await api.post('/api/quick', { tc: null, client: 'clientdddd' })).body;
+    assert.notEqual(q.id, c.id);
+    assert.equal((await api.get(`/api/rooms/${q.id}`)).startFen, SK.START_FEN);
+    sc.close();
+  });
+  await withServer({ dataFile }, async api => {
+    let st = await api.get(`/api/rooms/${a.id}`);
+    assert.equal(st.startFen, fen, 'the start position survives a restart');
+    assert.deepEqual(st.moves, ['c3c4', 'a1a2']);
+    await api.post(`/api/rooms/${a.id}/resign`, { token: b.token });
+    await api.post(`/api/rooms/${a.id}/rematch`, { token: a.token });
+    const next = (await api.post(`/api/rooms/${a.id}/rematch`, { token: b.token })).body.next;
+    st = await api.get(`/api/rooms/${next}`);
+    assert.equal(st.startFen, fen, 'a rematch starts from the same position');
+    assert.equal((await api.post(`/api/rooms/${next}/move`, { token: a.token, uci: 'c3c4' })).status, 200, 'colours swapped: the old White now plays Black');
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('artifact rooms: games from a set-up position', async () => {
+  const db = fakeDb();
+  const alice = globalThis.Online.dbBackend(db, 'alice');
+  const bob = globalThis.Online.dbBackend(db, 'bob');
+  const tick = () => new Promise(r => setTimeout(r, 5));
+  const fen = '6/6/6/2NN2/2k3/K5[-] w 0 1';
+  await assert.rejects(alice.create({ color: 'b', fen: '6/6/6/2k3/6/K5[-] w 0 1' }), /cannot start/);
+  const id = await alice.create({ color: 'b', fen });
+  let open = null;
+  bob.lobby(rows => (open = rows.open));
+  let seen = null;
+  bob.subscribe(id, u => (seen = u), err => assert.fail(err));
+  await tick(); await tick();
+  assert.equal(open[0].custom, true);
+  assert.equal(seen.you, 'w');
+  assert.equal(seen.startFen, fen);
+  await assert.rejects(bob.move(id, 'b2b3'), /Illegal/);
+  await bob.move(id, 'c3d5');
+  await alice.move(id, 'c2d2');
+  await tick();
+  assert.deepEqual(seen.moves, ['c3d5', 'c2d2']);
+  await bob.resign(id);
+  await alice.rematch(id);
+  const { next } = await bob.rematch(id);
+  let again = null;
+  alice.subscribe(next, u => (again = u), err => assert.fail(err));
+  await tick();
+  assert.equal(again.startFen, fen, 'a rematch starts from the same position');
+  assert.equal(again.you, 'w');
+  assert.equal(globalThis.Online.cleanFen('nonsense'), null);
+  assert.equal(globalThis.Online.cleanFen(null), SK.START_FEN);
+});
+
 test('online server: games survive a restart with --data', async () => {
   const fs = require('node:fs');
   const os = require('node:os');
