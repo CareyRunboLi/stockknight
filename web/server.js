@@ -11,8 +11,9 @@
 // API (JSON bodies; every player action carries the player's secret `token`):
 //   GET  /api/health                                   -> { ok, ruleset }
 //   GET  /api/lobby                                    -> { open: [...], live: [...], playing }
-//   POST /api/rooms   { color, tc, name, public, client } -> { id, token, color }
+//   POST /api/rooms   { color, tc, name, public, client, fen } -> { id, token, color }
 //                     tc: { base: seconds, inc: seconds } or null for an untimed game
+//                     fen: the position to start from (RULES.md), or absent for the usual start
 //   POST /api/quick   { tc, name, client }             -> { id, token, color }
 //                     joins a waiting public game with the same time control, or makes one
 //   POST /api/rooms/:id/join     { name, client }      -> { token, color } | 409 room is full
@@ -72,6 +73,20 @@ function cleanTc(v) {
   return { base, inc };
 }
 
+// A start position a game may begin from: a legal position (RULES.md FEN) that is not already
+// over. Returns its FEN as the engine writes it, START_FEN for none, or null when it is not usable.
+function cleanFen(v) {
+  if (v === undefined || v === null || v === '') return SK.START_FEN;
+  if (typeof v !== 'string' || v.length > 120) return null;
+  try {
+    const pos = new SK.Position(v);
+    if (pos.status().state !== 'ongoing') return null;
+    return pos.fen();
+  } catch {
+    return null;
+  }
+}
+
 const sameTc = (a, b) => (!a && !b) || (a && b && a.base === b.base && a.inc === b.inc);
 const cleanClient = v => (typeof v === 'string' && /^[a-z0-9]{8,40}$/i.test(v) ? v : null);
 
@@ -95,11 +110,12 @@ function createGameServer(options = {}) {
 
   const newToken = () => crypto.randomBytes(16).toString('hex');
 
-  function makeRoom({ tc = null, isPublic = false } = {}) {
+  function makeRoom({ tc = null, isPublic = false, startFen = SK.START_FEN } = {}) {
     const t = now();
     const room = {
       id: newId(),
-      pos: new SK.Position(),
+      startFen,
+      pos: new SK.Position(startFen),
       moves: [],
       tokens: { w: null, b: null },
       names: { w: null, b: null },
@@ -196,7 +212,7 @@ function createGameServer(options = {}) {
     }
     return {
       id: room.id,
-      startFen: SK.START_FEN,
+      startFen: room.startFen,
       moves: room.moves,
       players: { w: !!room.tokens.w, b: !!room.tokens.b },
       names: room.names,
@@ -272,7 +288,7 @@ function createGameServer(options = {}) {
     if (!opt.dataFile) return;
     const t = now();
     const list = [...rooms.values()].map(r => ({
-      id: r.id, moves: r.moves, tokens: r.tokens, names: r.names, hosts: r.hosts, tc: r.tc,
+      id: r.id, startFen: r.startFen, moves: r.moves, tokens: r.tokens, names: r.names, hosts: r.hosts, tc: r.tc,
       clock: r.clock ? { w: timeLeft(r, 'w', t), b: timeLeft(r, 'b', t) } : null,
       firstMoveUsed: r.phaseSince === null ? null : t - r.phaseSince,
       result: r.result, drawOffer: r.drawOffer, rematch: r.rematch, next: r.next,
@@ -295,7 +311,9 @@ function createGameServer(options = {}) {
     if (data.ruleset !== SK.RULESET) return console.error(`ignoring ${opt.dataFile}: ruleset ${data.ruleset}`);
     const t = now();
     for (const d of data.rooms || []) {
-      const pos = new SK.Position();
+      const startFen = cleanFen(d.startFen);
+      if (!startFen) continue;
+      const pos = new SK.Position(startFen);
       let ok = true;
       for (const u of d.moves) {
         const m = pos.moveFromUci(u);
@@ -305,7 +323,7 @@ function createGameServer(options = {}) {
       if (!ok) continue;
       const room = {
         ...makeRoom(),
-        pos, moves: d.moves, tokens: d.tokens, names: d.names, hosts: d.hosts || { w: null, b: null }, tc: d.tc,
+        startFen, pos, moves: d.moves, tokens: d.tokens, names: d.names, hosts: d.hosts || { w: null, b: null }, tc: d.tc,
         clock: d.clock, result: d.result, drawOffer: d.drawOffer, rematch: d.rematch || { w: false, b: false },
         next: d.next, isPublic: d.isPublic, created: d.created, touched: d.touched,
       };
@@ -354,11 +372,11 @@ function createGameServer(options = {}) {
       if (seated(r)) {
         playing++;
         if (r.moves.length && (connected(r, 'w') || connected(r, 'b'))) {
-          live.push({ id: r.id, tc: r.tc, names: r.names, moves: r.moves.length, watchers: [...r.clients].filter(c => !c.color).length });
+          live.push({ id: r.id, tc: r.tc, custom: r.startFen !== SK.START_FEN, names: r.names, moves: r.moves.length, watchers: [...r.clients].filter(c => !c.color).length });
         }
       } else if (r.isPublic) {
         const host = r.tokens.w ? 'w' : 'b';
-        if (connected(r, host)) open.push({ id: r.id, tc: r.tc, open: other(host), name: r.names[host], created: r.created });
+        if (connected(r, host)) open.push({ id: r.id, tc: r.tc, custom: r.startFen !== SK.START_FEN, open: other(host), name: r.names[host], created: r.created });
       }
     }
     open.sort((a, b) => b.created - a.created);
@@ -370,7 +388,9 @@ function createGameServer(options = {}) {
     sweep();
     if (rooms.size >= opt.maxRooms) return null;
     const tc = cleanTc(body.tc);
-    const room = makeRoom({ tc, isPublic: !!body.public });
+    const startFen = cleanFen(body.fen);
+    if (!startFen) return { error: 'That position cannot start a game' };
+    const room = makeRoom({ tc, isPublic: !!body.public, startFen });
     const color = body.color === 'w' || body.color === 'b' ? body.color : Math.random() < 0.5 ? 'w' : 'b';
     const token = seat(room, color, body);
     scheduleSave();
@@ -478,7 +498,7 @@ function createGameServer(options = {}) {
       room.rematch[color] = true;
       if (room.rematch.w && room.rematch.b) {
         // Colours swap; each player keeps their token.
-        const next = makeRoom({ tc: room.tc });
+        const next = makeRoom({ tc: room.tc, startFen: room.startFen });
         next.tokens = { w: room.tokens.b, b: room.tokens.w };
         next.names = { w: room.names.b, b: room.names.w };
         next.hosts = { w: room.hosts.b, b: room.hosts.w };
@@ -505,7 +525,7 @@ function createGameServer(options = {}) {
       const tc = cleanTc(body.tc);
       const client = cleanClient(body.client);
       for (const r of rooms.values()) {
-        if (!r.isPublic || r.result || seated(r) || !sameTc(r.tc, tc)) continue;
+        if (!r.isPublic || r.result || seated(r) || !sameTc(r.tc, tc) || r.startFen !== SK.START_FEN) continue;
         const host = r.tokens.w ? 'w' : 'b';
         if (!connected(r, host) || (client && r.hosts[host] === client)) continue;
         const color = other(host);
@@ -513,7 +533,7 @@ function createGameServer(options = {}) {
         changed(r);
         return send(res, 200, { id: r.id, token, color });
       }
-      const made = create({ ...body, public: true, color: 'random' });
+      const made = create({ ...body, fen: null, public: true, color: 'random' });
       return made ? send(res, 200, made) : send(res, 503, { error: 'server full' });
     }
 
@@ -523,6 +543,7 @@ function createGameServer(options = {}) {
       const body = await readJson(req);
       if (!body) return send(res, 400, { error: 'bad JSON' });
       const made = create(body);
+      if (made && made.error) return send(res, 400, made);
       return made ? send(res, 200, made) : send(res, 503, { error: 'server full' });
     }
 

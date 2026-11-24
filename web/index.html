@@ -222,6 +222,7 @@
               <option value="6/6/6/2NN2/2k3/K5[-] w 0 1">King and two knights v king</option>
             </select>
             <button class="btn primary" id="aPlayHere" title="Play Stockhorse from this position">Play from here</button>
+            <button class="btn" id="aPlayOnline" title="Start an online game from this position">Play online from here</button>
           </div>
         </aside>
 
@@ -344,6 +345,25 @@
       <div class="quick-row" id="quickWrap">
         <button class="btn primary" value="quick">Quick pairing</button>
         <span class="muted" id="quickNote">Plays the next person who picks the same time control.</span>
+      </div>
+      <h3>Starting position</h3>
+      <div class="seg" id="ofenSeg">
+        <label><input type="radio" name="ofen" value="std" checked><span>Standard</span></label>
+        <label><input type="radio" name="ofen" value="custom"><span>From a position</span></label>
+      </div>
+      <div class="ofen" id="ofenWrap" hidden>
+        <div class="ofen-row">
+          <div class="mini-board" id="ofenBoard" aria-label="The starting position"></div>
+          <div class="ofen-side">
+            <p class="ofen-info" id="ofenInfo"></p>
+            <button class="btn" type="button" id="ofenSetup">Set up on the board…</button>
+          </div>
+        </div>
+        <label class="field">Position (FEN)
+          <input id="ofenInput" spellcheck="false" autocomplete="off" placeholder="e.g. 6/6/6/2NN2/2k3/K5[-] w 0 1">
+        </label>
+        <p class="error" id="ofenError" hidden></p>
+        <p class="muted ofen-note">Games from a set-up position are by invite only: send the link to your opponent.</p>
       </div>
       <h3>Invite a friend, playing as</h3>
       <div class="quick-row">

@@ -454,6 +454,22 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
 .seg span { display: block; padding: 7px 16px; cursor: pointer; }
 .seg input:checked + span { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ofen { margin-top: 10px; }
+.ofen-row { display: flex; gap: 14px; align-items: flex-start; }
+.ofen-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.dialog p.ofen-info { color: var(--text); margin: 0; font-size: 14px; line-height: 1.4; }
+.dialog p.ofen-note { font-size: 13px; margin: 6px 0 0; }
+.ofen .field { margin-top: 10px; }
+.ofen .field input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font-family: ui-monospace, monospace; font-size: 13px; }
+.mini-board {
+  flex: none; width: 132px; height: 132px; display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(6, 1fr);
+  border-radius: 6px; overflow: hidden; border: 1px solid var(--line);
+}
+.mini-board > div { position: relative; }
+.mini-board .light { background: var(--sq-light); }
+.mini-board .dark { background: var(--sq-dark); }
+.mini-board .piece { position: absolute; inset: 6%; width: 88%; height: 88%; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); margin-left: 4px; vertical-align: 1px; }
 .result { text-align: center; }
 .result .dialog-actions { justify-content: center; }
 .result-mark { width: 84px; height: 84px; margin: 0 auto 6px; }
