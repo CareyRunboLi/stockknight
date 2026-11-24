@@ -19,7 +19,7 @@ const workerSrc = `${engine}\n${endgame}\n${tasks}\n${config}\n${worker}`;
 
 let html = read('index.html');
 html = html.replace(/\s*<link rel="icon"[^>]*>/, '');
-html = html.replace('<link rel="stylesheet" href="style.css">', () => `<style>\n${read('style.css')}</style>`);
+html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, href) => `<style>\n${read(href)}</style>`);
 html = html.replace(/<script src="([^"]+)"><\/script>/g, (_, src) => {
   let js = read(src);
   if (src === 'app.js') js = `window.SK_WORKER_SRC = ${JSON.stringify(workerSrc)};\n${js}`;

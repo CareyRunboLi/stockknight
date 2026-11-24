@@ -2229,8 +2229,9 @@
   // --- routing ----------------------------------------------------------------------------
 
   function showView(name) {
-    for (const v of ['home', 'play', 'review', 'analysis', 'rules']) $(`#view-${v}`).hidden = v !== name;
+    for (const v of ['home', 'play', 'review', 'analysis', 'rules', 'train']) $(`#view-${v}`).hidden = v !== name;
     if (name !== 'analysis' && analysis.active) analysis.hide();
+    if (name !== 'train' && window.Train) window.Train.hide();
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name || (name === 'play' && a.dataset.nav === 'home')));
   }
 
@@ -2254,6 +2255,9 @@
       analysis.show();
     } else if (h === '#/rules') {
       showView('rules');
+    } else if (/^#\/train(\/|$)/.test(h)) {
+      showView('train');
+      window.Train.show(h);
     } else {
       showView('home');
       renderRecent();
@@ -2307,6 +2311,14 @@
     play.init();
     review.init();
     analysis.init();
+    window.Train.init({
+      $, $$, esc, pieceSvg, store, toast, BoardView,
+      openAnalysis(fen, moves, at) {
+        analysis.load(fen, moves, at);
+        location.hash = '#/analysis';
+      },
+      openPve: fen => openPveDialog(fen),
+    });
 
     $$('.mode-card').forEach(card => {
       card.onclick = () => {
@@ -2318,6 +2330,7 @@
         } else if (m === 'online') openOnlineDialog();
         else if (m === 'review') location.hash = '#/review';
         else if (m === 'analysis') location.hash = '#/analysis';
+        else if (m === 'train') location.hash = '#/train';
       };
     });
     document.addEventListener('click', e => {

@@ -68,7 +68,14 @@ sk-tb brute --dir tb --max 3                # compare with the brute-force solve
 sk-tb brute --dir tb 'KRvKP' 'KvK[RP]'      # ... or with chosen tables
 sk-tb stats --dir tb --max 4
 sk-tb probe --dir tb '6/6/6/q5/6/KkB3[-] b 0 1'
+sk-tb gen --dir tb --threads 2 KRPvKR       # just these tables and every table they lead to
+sk-tb puzzles --dir tb --per 12 KRvKP ...   # endgame puzzle candidates, JSON lines
+sk-tb puzzle --dir tb '<FEN>'               # the same for one position
 ```
+
+`puzzles` feeds the website's Train section: `node tools/train/gen-endgames.js cand.jsonl` picks,
+rates and explains the endgame puzzles in `web/train/endgames.js`, and
+`node tools/train/verify-endgames.js tb` re-probes every position of every solution line.
 
 Generation resumes: tables already in the folder are loaded, not solved again.
 

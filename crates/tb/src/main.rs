@@ -1,5 +1,7 @@
 //! sk-tb: build, check and probe endgame tablebases. See docs/TABLEBASES.md.
 
+mod puzzles;
+
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -14,13 +16,20 @@ const USAGE: &str = "usage:
   sk-tb check --dir D [--max N | SIG...]       check every stored value against its successors
   sk-tb brute --dir D [--max N | SIG...]       compare with an independent brute-force solver
   sk-tb stats --dir D [--max N]                wins, draws, losses and longest distance per table
-  sk-tb probe --dir D FEN                      result and every move's value";
+  sk-tb gen --dir D [--threads T] SIG...       solve these tables and every table they lead to
+  sk-tb probe --dir D FEN                      result and every move's value
+  sk-tb puzzles --dir D [--per N] [--seed S] [--budget B] SIG...
+                                               endgame puzzle candidates as JSON lines
+  sk-tb puzzle --dir D FEN                     the same for one position (null if it does not qualify)";
 
 struct Args {
     dir: Option<PathBuf>,
     max: Option<u32>,
     threads: usize,
     rest: Vec<String>,
+    per: usize,
+    seed: u64,
+    budget: u64,
 }
 
 fn parse(args: &[String]) -> Args {
@@ -29,6 +38,9 @@ fn parse(args: &[String]) -> Args {
         max: None,
         threads: 1,
         rest: Vec::new(),
+        per: 20,
+        seed: 1,
+        budget: 4_000_000,
     };
     let mut it = args.iter();
     while let Some(x) = it.next() {
@@ -50,6 +62,21 @@ fn parse(args: &[String]) -> Args {
                 a.threads = val()
                     .parse()
                     .unwrap_or_else(|_| die("--threads takes a number"))
+            }
+            "--per" => {
+                a.per = val()
+                    .parse()
+                    .unwrap_or_else(|_| die("--per takes a number"))
+            }
+            "--seed" => {
+                a.seed = val()
+                    .parse()
+                    .unwrap_or_else(|_| die("--seed takes a number"))
+            }
+            "--budget" => {
+                a.budget = val()
+                    .parse()
+                    .unwrap_or_else(|_| die("--budget takes a number"))
             }
             _ => a.rest.push(x.clone()),
         }
@@ -84,6 +111,21 @@ fn with_successors(tables: &mut Tables, s: Sig) {
     need.push(s);
     tables.keep_only(&need);
     tables.ensure(&need).unwrap_or_else(|e| die(&e));
+}
+
+/// `sigs` and every signature reachable from them, canonical, in solving order.
+fn closure(sigs: &[Sig]) -> Vec<Sig> {
+    let mut seen: Vec<Sig> = Vec::new();
+    let mut stack: Vec<Sig> = sigs.iter().map(|s| s.canonical().0).collect();
+    while let Some(s) = stack.pop() {
+        if seen.contains(&s) {
+            continue;
+        }
+        seen.push(s);
+        stack.extend(s.successors().into_iter().map(|x| x.canonical().0));
+    }
+    seen.sort_by_key(|s| s.solve_key());
+    seen
 }
 
 fn main() {
@@ -123,10 +165,17 @@ fn main() {
             std::fs::create_dir_all(&d).unwrap_or_else(|e| die(&e.to_string()));
             let mut tables = open(&a);
             let start = Instant::now();
-            let todo: Vec<Sig> = canonical_sigs(a.max.unwrap_or(4))
-                .into_iter()
-                .filter(|s| !tables.has_file(s))
-                .collect();
+            let wanted: Vec<Sig> = if a.rest.is_empty() {
+                canonical_sigs(a.max.unwrap_or(4))
+            } else {
+                let given: Vec<Sig> = a
+                    .rest
+                    .iter()
+                    .map(|x| Sig::parse(x).unwrap_or_else(|e| die(&e)))
+                    .collect();
+                closure(&given)
+            };
+            let todo: Vec<Sig> = wanted.into_iter().filter(|s| !tables.has_file(s)).collect();
             println!("{} tables to solve", todo.len());
             for (i, s) in todo.iter().enumerate() {
                 let t0 = Instant::now();
@@ -233,6 +282,24 @@ fn main() {
                 pos.unmake_move();
                 println!("  {text:<8} opponent {cv}");
             }
+        }
+        "puzzles" => {
+            let mut tables = open(&a);
+            for x in &a.rest {
+                let s = Sig::parse(x).unwrap_or_else(|e| die(&e));
+                let need = closure(&[s]);
+                tables.keep_only(&need);
+                tables.ensure(&need).unwrap_or_else(|e| die(&e));
+                puzzles::run(&tables, s, a.per, a.seed, a.budget);
+            }
+        }
+        "puzzle" => {
+            let fen = a.rest.join(" ");
+            let pos = Position::from_fen(&fen).unwrap_or_else(|e| die(&e));
+            let mut tables = open(&a);
+            let need = closure(&[Sig::of(&pos)]);
+            tables.ensure(&need).unwrap_or_else(|e| die(&e));
+            puzzles::one(&tables, &fen);
         }
         _ => die(USAGE),
     }

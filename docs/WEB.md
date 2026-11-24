@@ -10,6 +10,7 @@ the engines play. No build step and no dependencies.
 node web/server.js            # http://localhost:8080/  (all features, including online games)
 node web/server.js --data rooms.json   # the same, keeping games across restarts
 python3 -m http.server        # from the repo root, then open /web/  (everything but online games)
+node web/test-train.js        # the Train section's openings and puzzles against the rules
 node web/test.js              # engine tasks, analysis lines and move tree, review classification, online server
 node web/calibrate.js         # re-measure the Elo of each strength setting (see docs/STRENGTH.md)
 ```
@@ -23,6 +24,7 @@ node web/calibrate.js         # re-measure the Elo of each strength setting (see
 | Online | See [Online play](#online-play) below |
 | Moving | Click or drag a piece. To drop, click a piece in your reserve (beside the board), then a highlighted square. A reserve piece is only clickable when it has a legal drop |
 | Analysis board | See [Analysis board](#analysis-board) below |
+| Train | `#/train`: named openings to study and practise, 367 middlegame tactics and 270 tablebase endgames with levels, hints, explanations and a training rating. See [TRAIN.md](TRAIN.md) |
 | Game review | Every position is searched with a full window for every legal move, so each played move has an exact score at the same depth as the best move. Review time per position: Quick 0.25 s, Standard 0.7 s, Deep 1.8 s |
 | Saved games | The last 40 finished or reviewed games are kept in the browser (`localStorage`). Move lists can be copied and pasted back in for review |
 
