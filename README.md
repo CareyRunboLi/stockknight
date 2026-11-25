@@ -1,6 +1,6 @@
 # StockKnight
 
-A Stockfish-style engine for **KnightChess** (a 6×6 drop-chess variant) and an online platform
+A Stockfish-style engine for **Maki** (a 6×6 drop-chess variant) and an online platform
 to play and evaluate games.
 
 **Play Maki in your browser: https://ilovespectraltheorem.github.io/stockknight/**
