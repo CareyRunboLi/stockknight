@@ -1,7 +1,5 @@
 /* The Train section (web/train.js): stage hub, puzzle lists, puzzle solving and openings. */
 
-@media (min-width: 1101px) { .modes { grid-template-columns: repeat(3, 1fr); } }
-
 .train-page { max-width: 1100px; margin: 0 auto; }
 .train-head { margin: 8px 0 24px; }
 .train-head h1, .train-listhead h1 {
