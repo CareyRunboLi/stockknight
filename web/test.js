@@ -7,6 +7,7 @@ const T = require('./engine-tasks.js');
 const R = require('./review.js');
 const { MoveTree } = require('./tree.js');
 const { createServer, createGameServer } = require('./server.js');
+const Share = require('./share.js');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -783,6 +784,66 @@ test('online server: games survive a restart with --data', async () => {
     assert.equal((await api.post(`/api/rooms/${a.id}/move`, { token: a.token, uci: 'a2a3' })).status, 200, 'tokens still work');
   });
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+// A legal game from the start, found by always playing the first legal move, so the share
+// tests do not depend on any particular opening.
+function someMoves(n, fen = SK.START_FEN) {
+  const pos = new SK.Position(fen);
+  const out = [];
+  while (out.length < n && pos.status().state === 'ongoing') {
+    const m = pos.legalMoves()[out.length % 3 === 2 ? 1 : 0];
+    out.push(pos.moveToUci(m));
+    pos.makeMove(m);
+  }
+  return out;
+}
+
+test('share links round-trip games and positions through Share.read', () => {
+  const moves = someMoves(12);
+  const game = { fen: SK.START_FEN, moves, at: 5, white: 'Ann Lee', black: 'Stockhorse 1200', result: { winner: 'b', reason: 'checkmate' } };
+  const url = Share.shareUrl('https://example.org/maki/?x=1#/play', 'review', game);
+  assert.ok(url.startsWith('https://example.org/maki/#/review?'), url);
+  assert.ok(!/[\s\[\]]/.test(url), 'no spaces or brackets in the link');
+  const r = Share.read(`Look at this: ${url}`);
+  assert.equal(r.kind, 'review');
+  assert.deepEqual(r.moves, moves);
+  assert.equal(r.at, 5);
+  assert.equal(r.white, 'Ann Lee');
+  assert.equal(r.black, 'Stockhorse 1200');
+  assert.deepEqual(r.result, { winner: 'b', reason: 'checkmate' });
+
+  const fen = '6/6/6/2NN2/2k3/K5[-] w 0 1';
+  const a = Share.read(Share.shareUrl('https://x.test/', 'analysis', { fen, moves: ['a1a2'], at: 0 }));
+  assert.equal(a.kind, 'analysis');
+  assert.equal(a.fen, fen);
+  assert.deepEqual(a.moves, ['a1a2']);
+  assert.equal(a.at, 0);
+  assert.deepEqual(Share.read('https://x.test/#/online/k7pm2x'), { kind: 'online', id: 'k7pm2x' });
+  assert.ok(Share.read(Share.shareUrl('https://x.test/', 'review', { moves: ['a1a1'] })).error, 'an illegal move in a link is an error');
+});
+
+test('game files round-trip, and Share.read takes FENs and move lists', () => {
+  const fen = '6/6/6/2NN2/2k3/K5[-] b 0 1';
+  const moves = someMoves(9, fen);
+  const text = Share.gameText({ fen, moves, white: 'A "quoted" name', black: 'B', result: { winner: null, reason: 'threefold' }, date: Date.UTC(2026, 10, 24) });
+  assert.match(text, /\[FEN "6\/6\/6\/2NN2\/2k3\/K5\[-\] b 0 1"\]/);
+  assert.match(text, /^1\.\.\. /m, 'numbering starts with Black');
+  const r = Share.read(text);
+  assert.equal(r.kind, 'review');
+  assert.equal(r.fen, fen);
+  assert.deepEqual(r.moves, moves);
+  assert.equal(r.white, 'A "quoted" name');
+  assert.deepEqual(r.result, { winner: null, reason: 'threefold' });
+  assert.equal(Share.fileName({ white: 'You', black: 'Stockhorse 1200', date: Date.UTC(2026, 10, 24) }), 'maki-you-vs-stockhorse-1200-2026-11-24.txt');
+
+  const start = someMoves(4);
+  assert.deepEqual(Share.read(`1. ${start[0]} ${start[1]} 2. ${start[2]} ${start[3]}`).moves, start);
+  assert.equal(Share.read(`${fen} moves ${moves.slice(0, 2).join(' ')}`).moves.length, 2);
+  assert.equal(Share.read(fen).kind, 'analysis');
+  assert.equal(Share.read('hello there'), null);
+  assert.equal(Share.read(''), null);
+  assert.ok(Share.read(`${start[0]} ${start[0]}`).error);
 });
 
 (async () => {

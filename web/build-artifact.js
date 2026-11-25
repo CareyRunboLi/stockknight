@@ -18,7 +18,7 @@ const config = "self.MAKI_CONFIG = { server: '', wasm: '', net: '' };";
 const workerSrc = `${engine}\n${endgame}\n${tasks}\n${config}\n${worker}`;
 
 let html = read('index.html');
-html = html.replace(/\s*<link rel="icon"[^>]*>/, '');
+html = html.replace(/\s*<link rel="icon"[^>]*>/, '').replace(/\s*<link rel="manifest"[^>]*>/, '');
 html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, href) => `<style>\n${read(href)}</style>`);
 html = html.replace(/<script src="([^"]+)"><\/script>/g, (_, src) => {
   let js = read(src);

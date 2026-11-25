@@ -1,0 +1,39 @@
+{
+  "name": "Maki",
+  "short_name": "Maki",
+  "description": "Play Maki, the 6×6 drop game, against the Stockhorse engine or a friend, and review your games move by move.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1d2127",
+  "theme_color": "#1d2127",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "text/plain": [
+          ".maki",
+          ".txt"
+        ]
+      }
+    }
+  ]
+}

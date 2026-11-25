@@ -28,7 +28,39 @@ node web/calibrate.js         # re-measure the Elo of each strength setting (see
 | Learn | See [Learn](#learn) below |
 | Train | `#/train`: named openings to study and practise, 367 middlegame tactics and 270 tablebase endgames with levels, hints, explanations and a training rating. See [TRAIN.md](TRAIN.md) |
 | Game review | Every position is searched with a full window for every legal move, so each played move has an exact score at the same depth as the best move. Review time per position: Quick 0.25 s, Standard 0.7 s, Deep 1.8 s |
+| Share | **Share** on the analysis board, in Review, on the play screen and in the end-of-game dialog opens a share sheet: a preview of the position, a link, the phone's own share sheet (**Share…**, where the browser has one), Copy position, Copy moves and Download game file. See [Sharing and importing](#sharing-and-importing) |
+| Import | Open a shared link, paste (Ctrl+V anywhere outside a text box), drop a file or link on the page, use **Import…** on the analysis board, or the box and **Open a game file…** on the empty Review page |
 | Saved games | The last 40 finished or reviewed games are kept in the browser (`localStorage`). Move lists can be copied and pasted back in for review |
+
+## Sharing and importing
+
+Everything lives in the link, so sharing needs no server and works on GitHub Pages:
+
+| Link | Opens |
+|---|---|
+| `#/analysis?fen=<fen>&moves=b2b3.c5c4&at=1` | The analysis board, with the line as its main line and the cursor after `at` moves. The FEN is left out for the starting position; spaces in it are written `_` |
+| `#/review?moves=…&w=<white>&b=<black>&r=w\|b\|d&why=<reason>[&fen=…][&at=…]` | The game in Review (and in the saved games) |
+| `#/online/<id>` | A live online game, as before |
+
+After a shared link is opened its query is dropped from the address bar, so a reload does not
+import it again. A game file (Download game file) is a few tag lines and numbered UCI moves:
+
+```
+[Game "Maki"]
+[White "You"]
+[Black "Stockhorse 1200"]
+[Result "1-0"]
+[Termination "checkmate"]
+[FEN "…"]        (only for a game that did not start from the usual position)
+
+1. b2b3 c5c4 2. R@c4 … 1-0
+```
+
+`web/share.js` writes links and files and reads anything back: a link (also inside other text),
+a game file, a FEN with or without `moves …`, or a bare move list. Game files and review links open
+in Review; positions, analysis links and move lists open on the analysis board (in Review when
+pasted on the Review page). The site has a web app manifest: installed on a phone, Maki appears in
+the system share sheet (`share_target`) and opens `.maki`/`.txt` game files (`file_handlers`).
 
 ## Learn
 
