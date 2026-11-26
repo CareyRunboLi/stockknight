@@ -1111,9 +1111,55 @@
     flipped: false,
     runId: 0,
     positions: [],
+    // Exploring: the game as the main line of a move tree, plus any line tried from it.
+    tree: null,
+    cur: 0, // the tree node on the board; `cursor` is the game ply it branches from
+    eng: null, // live engine lines for the position on the board
+    live: null, // the latest live result: { node, depth, lines, ... }
+    liveRun: 0,
+    thinking: false,
+    active: false,
+    dropSel: null,
+    engineOn: store.get('sk.rvEngine', true),
+    multipv: store.get('sk.rvLines', 3),
 
     init() {
-      this.board = new BoardView($('#reviewBoard'));
+      this.board = new BoardView($('#reviewBoard'), { onMove: uci => this.play(uci) });
+      this.board.onSelect = sel => {
+        this.dropSel = sel && sel.drop ? sel.drop : null;
+        this.renderBars(this.tree.position(this.cur));
+      };
+      for (const id of ['#rBarTop', '#rBarBottom']) {
+        $(id).addEventListener('click', e => {
+          const b = e.target.closest('.res.usable');
+          if (b) this.board.selectDrop(+b.dataset.type);
+        });
+      }
+      $('#rEngineOn').checked = this.engineOn;
+      $('#rEngineOn').onchange = () => {
+        this.engineOn = $('#rEngineOn').checked;
+        store.set('sk.rvEngine', this.engineOn);
+        this.render();
+        this.runLive();
+      };
+      $('#rMultipv').value = String(this.multipv);
+      $('#rMultipv').onchange = () => {
+        this.multipv = +$('#rMultipv').value || 3;
+        store.set('sk.rvLines', this.multipv);
+        this.runLive();
+      };
+      $('#rLines').addEventListener('click', e => {
+        const b = e.target.closest('[data-line]');
+        const r = this.live;
+        if (!b || !r || r.node !== this.cur) return;
+        const line = r.lines[+b.dataset.line];
+        if (line) this.goNode(this.tree.addLine(this.cur, line.pv.slice(0, +b.dataset.idx + 1)).id);
+      });
+      $('#rVariation').addEventListener('click', e => {
+        if (e.target.closest('#rBackToGame')) return this.go(this.cursor);
+        const b = e.target.closest('[data-node]');
+        if (b) this.goNode(+b.dataset.node);
+      });
       $$('[data-step]').forEach(b => (b.onclick = () => this.step(b.dataset.step)));
       $('#rFlip').onclick = () => {
         this.flipped = !this.flipped;
@@ -1146,11 +1192,18 @@
       $('#btnAnalyseHere').onclick = () => {
         if (!this.game) return;
         analysis.load(this.game.startFen, this.game.moves.slice(), this.cursor);
+        const extra = this.tree.path(this.cur).slice(this.cursor);
+        if (extra.length) {
+          // Bring the line being explored along, as a variation off the game.
+          analysis.cur = analysis.tree.addLine(analysis.cur, extra).id;
+          analysis.save();
+        }
         location.hash = '#/analysis';
       };
       $('#btnOther').onclick = () => {
         this.runId++;
         reviewEngine.reset();
+        this.stopLive();
         this.game = null;
         this.show();
       };
@@ -1194,14 +1247,99 @@
         pos.makeMove(m);
       }
       this.moveInfo = codes;
+      this.tree = new MoveTree(game.startFen);
+      this.cur = this.tree.addLine(0, game.moves).id;
+      this.live = null;
       this.show();
       this.analyse();
     },
 
     show() {
+      this.active = true;
       $('#reviewEmpty').hidden = !!this.game;
       $('#reviewArena').hidden = !this.game;
-      if (this.game) this.render();
+      if (this.game) {
+        this.render();
+        this.runLive();
+      } else {
+        this.stopLive();
+      }
+    },
+
+    hide() {
+      this.active = false;
+      this.stopLive();
+    },
+
+    // Whether the board shows a position from the game itself, not a line tried from it.
+    onGame() {
+      return this.tree.isMainline(this.cur);
+    },
+
+    // The game ply a node branches from: its own ply on the game line, otherwise the ply of
+    // the last game position before the line left it.
+    branchPly(id) {
+      let n = this.tree.get(id);
+      while (n.parent && !this.tree.isMainline(n.id)) n = n.parent;
+      return n.ply;
+    },
+
+    // A move made on the board: the game's own next move stays on the game line, anything
+    // else starts (or follows) a line to explore.
+    play(uci) {
+      const n = this.tree.add(this.cur, uci);
+      if (n) this.goNode(n.id);
+    },
+
+    goNode(id) {
+      if (!this.tree.get(id)) return;
+      this.cur = id;
+      this.cursor = this.branchPly(id);
+      this.dropSel = null;
+      this.render();
+      this.runLive();
+    },
+
+    stopLive() {
+      this.liveRun++;
+      this.thinking = false;
+      if (this.eng && this.eng.pending.size) this.eng.reset();
+    },
+
+    // Stockhorse's best lines for the position on the board, deepening like the analysis board.
+    async runLive() {
+      this.stopLive();
+      const run = this.liveRun;
+      if (!this.game || !this.active) return;
+      const node = this.cur;
+      const pos = this.tree.position(node);
+      if (this.live && this.live.node !== node) this.live = null;
+      if (!this.engineOn || pos.status().state !== 'ongoing') return this.renderEngine(pos);
+      if (!this.eng) this.eng = new EngineClient();
+      const eng = this.eng;
+      const fen = this.tree.fen, moves = this.tree.path(node);
+      const steps = eng.worker ? ENGINE_STEPS : ENGINE_STEPS.slice(0, 2);
+      this.live = null;
+      this.thinking = true;
+      this.renderEngine(pos);
+      for (const movetime of steps) {
+        let r;
+        try {
+          r = await eng.call('lines', { fen, moves, movetime, depth: 40, multipv: this.multipv });
+        } catch {
+          return; // a newer position took over
+        }
+        if (run !== this.liveRun) return;
+        const done = this.live && r.depth <= this.live.depth && movetime > ENGINE_STEPS[1];
+        if (!this.live || r.depth >= this.live.depth) this.live = { ...r, node };
+        const top = r.lines[0];
+        if (done || (top && Math.abs(top.score) >= SK.MATE - 1000 && r.depth >= SK.MATE - Math.abs(top.score))) break;
+        this.renderEngine(pos);
+        this.renderArrows(pos);
+      }
+      this.thinking = false;
+      this.renderEngine(pos);
+      this.renderArrows(pos);
     },
 
     async analyse() {
@@ -1241,6 +1379,12 @@
     step(k) {
       if (!this.game) return;
       const n = this.game.moves.length;
+      if (!this.onGame() && (k === 'prev' || k === 'next')) {
+        const node = this.tree.get(this.cur);
+        if (k === 'prev') this.goNode(node.parent.id);
+        else if (node.children.length) this.goNode(node.children[0].id);
+        return;
+      }
       if (k === 'start') this.go(0);
       else if (k === 'end') this.go(n);
       else if (k === 'prev') this.go(this.cursor - 1);
@@ -1249,38 +1393,70 @@
 
     go(i) {
       const n = this.game.moves.length;
-      this.cursor = Math.max(0, Math.min(n, i));
-      this.render();
+      const k = Math.max(0, Math.min(n, i));
+      const node = k ? this.tree.mainline(0)[k - 1] : this.tree.root;
+      this.goNode(node.id);
+    },
+
+    // The game move on the board with its classification, when the board is on the game line.
+    gamePly() {
+      const k = this.cursor;
+      return this.data && k > 0 && this.onGame() ? this.data.plies[k - 1] : null;
+    },
+
+    arrows(pos) {
+      const ply = this.gamePly();
+      const k = this.cursor;
+      // After a slip, the move that should have been played.
+      if (ply && ply.best && ply.best !== ply.uci && !['best', 'brilliant', 'great', 'forced'].includes(ply.cls)) {
+        const before = buildPosition(this.game.startFen, this.game.moves.slice(0, k - 1));
+        return [{ move: before.moveFromUci(ply.best), color: '#5f9e3a' }];
+      }
+      const r = this.live;
+      if (!this.engineOn || !r || r.node !== this.cur) return [];
+      return r.lines.slice(0, 3).map((l, i) => ({ move: pos.moveFromUci(l.move), color: LINE_COLORS[i] })).filter(a => a.move).reverse();
+    },
+
+    renderArrows(pos) {
+      this.board.arrows = this.arrows(pos);
+      this.board.render(); // keeps a picked piece picked
+    },
+
+    renderBars(pos) {
+      const bottom = this.flipped ? BLACK : WHITE;
+      $('#rBarBottom').innerHTML = this.barHtml(pos, bottom);
+      $('#rBarTop').innerHTML = this.barHtml(pos, bottom ^ 1);
     },
 
     render() {
       const g = this.game;
       if (!g) return;
       const k = this.cursor;
-      const pos = buildPosition(g.startFen, g.moves.slice(0, k));
-      const ply = this.data && k > 0 ? this.data.plies[k - 1] : null;
-      const last = k > 0 ? this.moveInfo[k - 1].m : 0;
-      const arrows = [];
-      if (ply && ply.best && ply.best !== ply.uci && !['best', 'brilliant', 'great', 'forced'].includes(ply.cls)) {
-        const before = buildPosition(g.startFen, g.moves.slice(0, k - 1));
-        arrows.push({ move: before.moveFromUci(ply.best), color: '#5f9e3a' });
-      }
+      const onGame = this.onGame();
+      const node = this.tree.get(this.cur);
+      const pos = this.tree.position(this.cur);
+      const ply = this.gamePly();
+      const last = node.parent ? this.tree.position(node.parent.id).moveFromUci(node.uci) : 0;
+      const st = pos.status();
       this.board.set({
         pos,
         flipped: this.flipped,
         lastMove: last,
-        movable: null,
+        movable: st.state === 'ongoing' ? pos.side : null,
         badge: ply ? { sq: moveTo(last), cls: ply.cls } : null,
-        arrows,
+        arrows: this.arrows(pos),
       });
-
-      const bottom = this.flipped ? BLACK : WHITE;
-      $('#rBarBottom').innerHTML = this.barHtml(pos, bottom);
-      $('#rBarTop').innerHTML = this.barHtml(pos, bottom ^ 1);
+      this.renderBars(pos);
 
       // Eval bar
       const evalEl = $('#reviewEval');
-      if (this.data) {
+      const live = this.live && this.live.node === this.cur && this.live.lines[0] ? this.live : null;
+      if (!onGame || (live && this.engineOn)) {
+        let white = 0;
+        if (st.state !== 'ongoing') white = st.state === 'draw' ? 0 : st.winner === WHITE ? SK.MATE - 1 : -(SK.MATE - 1);
+        else if (live) white = pos.side === WHITE ? live.lines[0].score : -live.lines[0].score;
+        setEvalBar(evalEl, white, this.flipped);
+      } else if (this.data) {
         const wp = this.data.curve[k];
         const a = this.analyses[k];
         let white;
@@ -1294,6 +1470,8 @@
 
       this.renderMoves();
       this.renderCoach(pos, ply);
+      this.renderVariation();
+      this.renderEngine(pos);
       this.renderGraph();
     },
 
@@ -1301,9 +1479,15 @@
       const g = this.game;
       const name = color === WHITE ? g.white : g.black;
       const acc = this.data ? this.data.players[color].accuracy : null;
+      const st = pos.status();
+      const mine = pos.side === color && st.state === 'ongoing';
+      const droppable = new Set(mine ? this.board.legal.map(moveDrop).filter(Boolean) : []);
       const res = DROP_ORDER.map(t => {
         const n = pos.hand[color][t];
-        return `<span class="res ${n ? '' : 'empty'}">${pieceSvg(LETTERS[t], colorKey(color))}${n > 1 ? `<span class="count">${n}</span>` : ''}</span>`;
+        const usable = droppable.has(t);
+        const cls = ['res', n ? '' : 'empty', usable ? 'usable' : '', usable && this.dropSel === t ? 'sel' : ''].join(' ');
+        return `<button class="${cls}" data-type="${t}" title="${n} ${window.Pieces.NAMES[LETTERS[t]]}${n === 1 ? '' : 's'} in reserve"${usable ? '' : ' tabindex="-1"'}>
+          ${pieceSvg(LETTERS[t], colorKey(color))}${n > 1 ? `<span class="count">${n}</span>` : ''}</button>`;
       }).join('');
       return `<div class="avatar">${pieceSvg('N', colorKey(color))}</div>
         <div><div class="pname">${esc(name)}</div><div class="psub">${colorName(color)}${acc !== null ? ` · accuracy ${acc.toFixed(1)}` : ''}</div></div>
@@ -1320,7 +1504,8 @@
         const j = i + off;
         if (j % 2 === 0) items.push(`<li><span class="no">${no0 + j / 2}.</span>`);
         const badge = p ? badgeHtml(p.cls) : '';
-        items.push(`<button class="mv${i === this.cursor - 1 ? ' cur' : ''}" data-ply="${i}">${badge}<span>${esc(mi.text)}</span></button>`);
+        const at = i === this.cursor - 1 ? (this.onGame() ? ' cur' : ' branch') : '';
+        items.push(`<button class="mv${at}" data-ply="${i}">${badge}<span>${esc(mi.text)}</span></button>`);
         if (j % 2 === 1) items.push('</li>');
       });
       if ((g.moves.length + off) % 2 === 1) items.push('</li>');
@@ -1337,6 +1522,8 @@
       const el = $('#coach');
       const g = this.game;
       const k = this.cursor;
+      el.hidden = !this.onGame();
+      if (el.hidden) return;
       if (!this.data) {
         el.innerHTML = '<div>Stockhorse is going through the game. You can step through the moves while it works.</div>';
         return;
@@ -1369,6 +1556,74 @@
       const line = ply.bestPv && ply.bestPv.length > 1 && ply.best !== ply.uci && ['inaccuracy', 'mistake', 'miss', 'blunder'].includes(ply.cls)
         ? `<div class="line">Best line: ${esc(this.pvText(k - 1, ply.bestPv))}</div>` : '';
       el.innerHTML = `${badgeHtml(ply.cls)}<div><div>${text}</div><div class="muted" style="font-size:13px">${who} · ${detail}</div>${line}</div>`;
+    },
+
+    // The line being explored, from where it leaves the game, with a way back.
+    renderVariation() {
+      const box = $('#rVariation');
+      if (this.onGame()) {
+        box.hidden = true;
+        return;
+      }
+      const k = this.cursor;
+      const num = numberer(this.tree.fen);
+      const path = [];
+      for (let n = this.tree.get(this.cur); n.ply > k; n = n.parent) path.unshift(n);
+      const line = path.concat(this.tree.mainline(this.cur));
+      const btns = line.map((n, i) => {
+        const no = num(n.ply, i === 0);
+        return `<button class="tmv${n.id === this.cur ? ' cur' : ''}" data-node="${n.id}">${no ? `<span class="no">${no}</span>` : ''}${esc(n.text)}</button>`;
+      }).join('');
+      const gameMove = k < this.moveInfo.length ? `instead of ${num(k + 1, true)}${this.moveInfo[k].text}` : 'after the game ended';
+      box.hidden = false;
+      box.innerHTML = `<div class="variation-head"><span><b>Exploring</b> <span class="muted">${esc(gameMove)}</span></span>
+        <button class="btn" id="rBackToGame" title="Back to the game position this line starts from">Back to game</button></div>
+        <div class="variation-line">${btns}</div>`;
+    },
+
+    renderEngine(pos) {
+      const on = this.engineOn;
+      const st = pos.status();
+      const r = this.live && this.live.node === this.cur ? this.live : null;
+      const white = s => (pos.side === WHITE ? s : -s);
+      $('#rEngine').classList.toggle('off', !on);
+      let score = '', info = '', lines = '';
+      if (!on) {
+        info = 'Turn Stockhorse on to see its best lines for each position. Move any piece to try your own ideas.';
+      } else if (st.state !== 'ongoing') {
+        score = st.state === 'draw' ? '½–½' : st.winner === WHITE ? '1–0' : '0–1';
+        info = 'Game over.';
+      } else if (!r) {
+        info = 'Stockhorse is thinking <span class="thinking"><i></i><i></i><i></i></span>';
+        score = '…';
+      } else {
+        const top = r.lines[0];
+        score = R.scoreText(white(top.score));
+        const nodes = r.nodes >= 1e6 ? `${(r.nodes / 1e6).toFixed(1)}M` : r.nodes >= 1e3 ? `${Math.round(r.nodes / 1e3)}k` : r.nodes;
+        info = `Depth ${r.depth} · ${nodes} nodes${this.thinking ? ' <span class="thinking"><i></i><i></i><i></i></span>' : ''} · click a move to play it out`;
+        const num = numberer(this.tree.fen);
+        const ply0 = this.tree.get(this.cur).ply;
+        lines = r.lines.map((l, i) => {
+          const p = new Position(pos.fen());
+          const out = [];
+          for (let j = 0; j < Math.min(l.pv.length, 12); j++) {
+            const m = p.moveFromUci(l.pv[j]);
+            if (!m) break;
+            const no = num(ply0 + j + 1, j === 0);
+            out.push(`<button class="pmv" data-line="${i}" data-idx="${j}">${no ? `<span class="no">${no}</span>` : ''}${esc(p.moveToText(m))}</button>`);
+            p.makeMove(m);
+          }
+          return `<li><span class="pv-score" style="--lc:${LINE_COLORS[i] || 'var(--line)'}">${R.scoreText(white(l.score))}</span><span class="pv-moves">${out.join('')}</span></li>`;
+        }).join('');
+      }
+      $('#rScore').textContent = score;
+      $('#rInfo').innerHTML = info;
+      $('#rLines').innerHTML = lines;
+      // On the game line the eval bar follows the review until live lines arrive.
+      if (r && on) {
+        const evalEl = $('#reviewEval');
+        if (st.state === 'ongoing') setEvalBar(evalEl, white(r.lines[0].score), this.flipped);
+      }
     },
 
     pvText(plyIndex, pv) {
@@ -1957,7 +2212,7 @@
         lines = r.lines.map((l, i) => {
           const p = new Position(pos.fen());
           const out = [];
-          for (let j = 0; j < Math.min(l.pv.length, 12); j++) {
+          for (let j = 0; j < Math.min(l.pv.length, 8); j++) {
             const m = p.moveFromUci(l.pv[j]);
             if (!m) break;
             const no = num(ply0 + j + 1, j === 0);
@@ -2600,6 +2855,7 @@
   function showView(name) {
     for (const v of ['home', 'play', 'review', 'analysis', 'rules', 'learn', 'train']) $(`#view-${v}`).hidden = v !== name;
     if (name !== 'analysis' && analysis.active) analysis.hide();
+    if (name !== 'review' && review.active) review.hide();
     if (name !== 'train' && window.Train) window.Train.hide();
     $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === name || (name === 'play' && a.dataset.nav === 'home')));
   }
