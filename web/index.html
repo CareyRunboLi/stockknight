@@ -166,10 +166,30 @@
             <div class="progress-text">Analysing… <span id="progressText"></span></div>
             <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
           </div>
-          <div class="summary" id="reviewSummary" hidden></div>
           <div class="coach" id="coach"></div>
+          <div class="variation" id="rVariation" hidden></div>
+          <div class="engine" id="rEngine">
+            <div class="engine-head">
+              <label class="switch" title="Stockhorse lines on or off">
+                <input type="checkbox" id="rEngineOn" checked><span class="switch-track"></span>
+                <span>Stockhorse</span>
+              </label>
+              <span class="engine-score" id="rScore"></span>
+              <label class="depth">Lines
+                <select id="rMultipv">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="5">5</option>
+                </select>
+              </label>
+            </div>
+            <div class="engine-info" id="rInfo"></div>
+            <ol class="pv-lines" id="rLines"></ol>
+          </div>
           <svg class="graph" id="evalGraph" viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Evaluation over the game"></svg>
           <ol class="moves" id="reviewMoves"></ol>
+          <div class="summary" id="reviewSummary" hidden></div>
           <div class="controls">
             <label class="depth">Depth
               <select id="reviewDepth">
