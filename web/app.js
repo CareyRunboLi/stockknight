@@ -399,7 +399,7 @@
       .slice(0, limit)
       .map(
         g => `<li><button data-game="${esc(g.id)}"><span><b>${esc(g.white)}</b> vs <b>${esc(g.black)}</b>
-          <span class="muted"> · ${esc(resultText(g.result) || 'unfinished')} · ${Math.ceil(g.moves.length / 2)} moves</span></span>
+          <span class="muted"> · ${esc(resultText(g.result) || 'unfinished')} · ${movesPlayed(g.startFen, g.moves.length)} moves</span></span>
           <span class="when">${timeAgo(g.date)}</span></button></li>`,
       )
       .join('');
@@ -516,7 +516,7 @@
 
     again() {
       if (!this.game || this.game.mode === 'pve') return openPveDialog(this.game && this.game.startFen !== START_FEN ? this.game.startFen : null);
-      if (this.game.mode === 'online') return openOnlineDialog();
+      if (this.game.mode === 'online') return openOnlineDialog(this.game.startFen);
       this.start({ mode: 'local' });
     },
 
@@ -602,9 +602,19 @@
       }
     },
 
+    // Whether Undo has something to take back. Against Stockhorse that needs a move of yours:
+    // from a position where it moved first, taking back only its move would just replay it.
+    canUndo() {
+      const g = this.game;
+      if (!g || g.mode === 'online' || !g.moves.length) return false;
+      if (g.mode !== 'pve') return true;
+      const first = new Position(g.startFen).side;
+      return g.moves.length > (first === g.humanColor ? 0 : 1);
+    },
+
     undo() {
       const g = this.game;
-      if (!g || g.mode === 'online' || !g.moves.length) return;
+      if (!this.canUndo()) return;
       engine.reset();
       this.token++;
       this.thinking = false;
@@ -612,7 +622,6 @@
       if (g.mode === 'pve') {
         // Back to the human's turn: one ply if the engine has not replied yet, otherwise two.
         n = this.pos.side === g.humanColor ? 2 : 1;
-        if (n > g.moves.length) n = g.moves.length;
       }
       g.moves.splice(g.moves.length - n, n);
       g.result = null;
@@ -674,7 +683,7 @@
         // A live game shares its room, so the link follows the game as it goes on.
         d.kind = 'online';
         d.url = `${Share.baseUrl(location.href)}#/online/${this.online.id}`;
-        d.summary = `${g.white} vs ${g.black} · ${g.result ? resultText(g.result) : 'live'}${g.moves.length ? ` · ${Math.ceil(g.moves.length / 2)} moves` : ''}`;
+        d.summary = `${g.white} vs ${g.black} · ${g.result ? resultText(g.result) : 'live'}${g.moves.length ? ` · ${movesPlayed(g.startFen, g.moves.length)} moves` : ''}`;
       } else if (!g.moves.length) {
         d.kind = 'analysis';
         d.title = 'Share this position';
@@ -702,7 +711,7 @@
       this.renderStatus();
       $('#playEval').hidden = !this.showEval;
       $('#btnEval').classList.toggle('primary', this.showEval);
-      $('#btnUndo').disabled = g.mode === 'online' || !g.moves.length;
+      $('#btnUndo').disabled = !this.canUndo();
       $('#btnResign').disabled = !!g.result || (g.mode === 'online' && !(this.online && this.online.color !== null));
       // No engine help in a live game against a person.
       $('#btnAnalysePlay').disabled = g.mode === 'online' && !g.result && !!(this.online && this.online.color !== null);
@@ -786,6 +795,8 @@
       if (g.result) {
         main = resultText(g.result);
         sub = 'Review the game to see where it was won and lost.';
+      } else if (g.mode === 'online' && this.online && !this.online.st) {
+        main = 'Connecting to the game…';
       } else if (g.mode === 'online' && this.online && (!this.online.players.w || !this.online.players.b)) {
         const st = this.online.st;
         main = st && st.public ? 'Looking for an opponent…' : 'Waiting for your opponent';
@@ -807,6 +818,7 @@
     async createRoom(color, fen = null) {
       try {
         const id = await backend.create({ color, tc: chosenTc(), name: store.get('sk.name', ''), fen });
+        this.madeFrom = { id, fen }; // shown at once, before the room's first update arrives
         location.hash = `#/online/${id}`;
       } catch (err) {
         toast(`Could not make a game: ${err.message}`);
@@ -835,8 +847,9 @@
       this.thinking = false;
       this.dropSel = null;
       this.online = { id, color: null, players: { w: false, b: false }, st: null, recvAt: 0, conn: true, sawNext: null, unsubscribe: null };
-      this.game = { id: `room-${id}`, mode: 'online', startFen: START_FEN, moves: [], white: 'White', black: 'Black', result: null, date: Date.now() };
-      this.pos = new Position(START_FEN);
+      const known = this.madeFrom && this.madeFrom.id === id && this.madeFrom.fen ? this.madeFrom.fen : START_FEN;
+      this.game = { id: `room-${id}`, mode: 'online', startFen: known, moves: [], white: 'White', black: 'Black', result: null, date: Date.now() };
+      this.pos = new Position(known);
       if (backend.kind === 'server') {
         $('#shareText').textContent = 'Send this link to your opponent:';
         $('#shareLink').value = `${location.origin}${location.pathname}#/online/${id}`;
@@ -1071,6 +1084,12 @@
 
   // --- result dialog ----------------------------------------------------------------------
 
+  // Moves played, counted as the move list numbers them: from Black to move, "1… a 2. b" is two.
+  function movesPlayed(startFen, plies) {
+    const off = new Position(startFen || START_FEN).side === BLACK ? 1 : 0;
+    return Math.ceil((plies + off) / 2);
+  }
+
   function showResult(g) {
     if (location.hash.indexOf('#/play') !== 0 && location.hash.indexOf('#/online') !== 0) return;
     const r = g.result;
@@ -1083,7 +1102,8 @@
     else if (me === null) title = `${r.winner === 'w' ? 'White' : 'Black'} wins`;
     else title = colorKey(me) === r.winner ? 'You win' : 'You lose';
     $('#resultTitle').textContent = title;
-    $('#resultText').textContent = `${resultText(r)} after ${Math.ceil(g.moves.length / 2)} move${g.moves.length > 2 ? 's' : ''}.`;
+    const n = movesPlayed(g.startFen, g.moves.length);
+    $('#resultText').textContent = `${resultText(r)} after ${n} move${n === 1 ? '' : 's'}.`;
     const mark = r.winner ? (r.winner === 'w' ? pieceSvg('N', 'w') : pieceSvg('N', 'b')) : pieceSvg('K', 'w');
     $('#resultMark').innerHTML = mark;
     const rematch = g.mode === 'online' && play.online && play.online.color !== null && r.reason !== 'aborted';
@@ -1576,12 +1596,18 @@
         this.editing.board.fill(0);
         this.renderEditor();
       };
-      $('#eCancel').onclick = () => this.closeEditor();
+      $('#eCancel').onclick = () => {
+        const back = this.afterEdit;
+        this.closeEditor();
+        if (back) back(null);
+      };
       $('#eDone').onclick = () => {
         const v = this.validate();
         if (v.error) return;
+        const back = this.afterEdit;
         this.closeEditor(false);
         this.load(v.fen);
+        if (back) back(v.fen);
       };
       $('#aBoard').addEventListener('pointerdown', e => {
         if (!this.editing) return;
@@ -1827,6 +1853,7 @@
       $('#aPromote').disabled = this.tree.isMainline(this.cur);
       $('#aDelete').disabled = !node.parent;
       $('#aPlayHere').disabled = st.state !== 'ongoing';
+      $('#aPlayOnline').disabled = st.state !== 'ongoing';
       $('#aCopyLine').disabled = !node.parent;
       for (const b of $$('#aNav [data-astep]')) {
         const s = b.dataset.astep;
@@ -1975,7 +2002,11 @@
 
     // --- position editor ---
 
-    openEditor() {
+    // `afterEdit(fen | null)`, when given, runs once the editor closes (Done gives the FEN,
+    // Cancel gives null): the online dialog uses it to come back with the position set up.
+    openEditor(afterEdit = null) {
+      this.afterEdit = afterEdit;
+      $('#eDone').textContent = afterEdit ? 'Use this position' : 'Analyse this position';
       this.stop();
       this.board.set({ movable: null });
       this.editFrom(this.tree.position(this.cur), true);
@@ -1996,6 +2027,7 @@
 
     closeEditor(rerender = true) {
       this.editing = null;
+      this.afterEdit = null;
       $('#aBoard').classList.remove('editing');
       $('#aPanel').hidden = false;
       $('#aEditor').hidden = true;
@@ -2388,7 +2420,17 @@
   function openPveDialog(fen = null) {
     const dlg = $('#dlgPve');
     pveFen = fen && fen !== START_FEN ? fen : null;
-    dlg.querySelector('h2').textContent = pveFen ? 'Play Stockhorse from this position' : 'Choose your opponent';
+    $('#pveFenWrap').hidden = !pveFen;
+    if (pveFen) {
+      // Show the position, and offer the side to move: from a set-up position that is usually
+      // the side you want to play.
+      const pos = new Position(pveFen);
+      $('#pveFenBoard').innerHTML = miniBoard(pos);
+      $('#pveFenInfo').innerHTML = `<b>${colorName(pos.side)} to move.</b><br>White's reserve: ${esc(reserveText(pos, WHITE))}.<br>Black's reserve: ${esc(reserveText(pos, BLACK))}.`;
+      $$('#pveFenSeg input').forEach(i => (i.checked = i.value === 'custom'));
+      $$('#colorSeg input').forEach(i => (i.checked = i.value === colorKey(pos.side)));
+    }
+    renderPveFen();
     const range = $('#strengthRange');
     range.min = STRENGTH.min;
     range.max = STRENGTH.max;
@@ -2402,6 +2444,13 @@
     dlg.returnValue = '';
     dlg.showModal();
   }
+
+  function renderPveFen() {
+    const custom = !!pveFen && $('#pveFenSeg input:checked').value === 'custom';
+    $('#pveFenPreview').hidden = !custom;
+    $('#dlgPve h2').textContent = custom ? 'Play Stockhorse from this position' : 'Choose your opponent';
+  }
+  $('#pveFenSeg').addEventListener('change', renderPveFen);
 
   function renderStrength() {
     const range = $('#strengthRange');
@@ -2440,7 +2489,8 @@
     const color = dlg.querySelector('input[name=color]:checked').value;
     store.set('sk.elo', elo);
     location.hash = '#/play';
-    play.start({ mode: 'pve', elo, color, fen: pveFen });
+    const custom = !!pveFen && $('#pveFenSeg input:checked').value === 'custom';
+    play.start({ mode: 'pve', elo, color, fen: custom ? pveFen : null });
   });
 
   // The online dialog's start position: null for the usual one, or a FEN.
@@ -2508,27 +2558,41 @@
 
   $('#ofenSeg').addEventListener('change', renderOnlineFen);
   $('#ofenInput').addEventListener('input', renderOnlineFen);
+  // Set up the position on the analysis board's editor; its Done button brings the dialog back
+  // with that position, and Cancel brings it back as it was.
   $('#ofenSetup').addEventListener('click', () => {
     $('#dlgOnline').close('setup');
-    const fen = $('#ofenInput').value.trim();
+    const typed = $('#ofenInput').value.trim();
     location.hash = '#/analysis';
     route();
-    if (fen && window.Online.cleanFen(fen)) analysis.load(fen);
-    analysis.openEditor();
-    toast('Set up the position, press Done, then Play online from here');
+    if (typed && window.Online.cleanFen(typed)) analysis.load(typed);
+    analysis.openEditor(fen => openOnlineDialog(fen || typed || null, { custom: true }));
+    toast('Set up the position, then press Use this position');
+  });
+
+  // Enter in a text box of the online dialog would press its first button, Quick pairing, and
+  // start a game from the usual position. Enter does what the box is for instead.
+  $('#dlgOnline').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT' || e.target.type === 'radio') return;
+    e.preventDefault();
+    const dlg = $('#dlgOnline');
+    if (e.target.id === 'joinCode') {
+      if ($('#joinCode').value.trim()) dlg.close('code');
+    } else if (e.target.id === 'ofenInput') {
+      if (!$('#dlgOnline button[value=ok]').disabled) dlg.close('ok');
+    }
   });
 
   let openGamesUnsub = null;
-  function openOnlineDialog(fen = null) {
+  // `fen`: the position to offer, or null for the usual start. With `custom` the dialog opens on
+  // "From a position" even without one (the FEN box is then left as it was).
+  function openOnlineDialog(fen = null, { custom = false } = {}) {
     const dlg = $('#dlgOnline');
     dlg.returnValue = '';
-    if (fen && fen !== START_FEN) {
-      $('#ofenInput').value = fen;
-      $$('#ofenSeg input').forEach(i => (i.checked = i.value === 'custom'));
-    } else if (fen === START_FEN) {
-      $$('#ofenSeg input').forEach(i => (i.checked = i.value === 'std'));
-    }
-    dlg.querySelector('h2').textContent = fen && fen !== START_FEN ? 'Play online from this position' : 'Play online';
+    const fromPos = !!(fen && fen !== START_FEN);
+    if (fromPos) $('#ofenInput').value = fen;
+    $$('#ofenSeg input').forEach(i => (i.checked = i.value === (fromPos || custom ? 'custom' : 'std')));
+    dlg.querySelector('h2').textContent = fromPos ? 'Play online from this position' : 'Play online';
     $('#joinCode').value = '';
     $('#onlineName').value = store.get('sk.name', '');
     const f = (backend && backend.features) || {};

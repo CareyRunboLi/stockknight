@@ -42,6 +42,22 @@ const net = path.join(__dirname, globalThis.MAKI_CONFIG.net);
     assert(l.lines[0].score >= l.lines[l.lines.length - 1].score);
   }
   console.log(`ok   ${e.net.split(' ').slice(0, 3).join(' ')}: play, analyse and lines`);
+
+  // Games from a set-up position (Play from here, online games from a position): Black to
+  // move, empty reserves, later move numbers.
+  for (const fen of ['rnkqnb/pppppp/6/1P4/P1PPPP/BNQKNR[PPRBpprb] b 0 1', 'k5/6/1Q4/2K3/6/6[-] b 0 1', 'k5/6/2K3/1Q4/6/6[-] w 3 12']) {
+    const pos = new SK.Position(fen);
+    const legal = new Set(pos.legalMoves().map(m => pos.moveToUci(m)));
+    const p = e.play({ fen, moves: [], elo: 1500 });
+    assert(legal.has(p.best), `play from ${fen}: ${p.best}`);
+    pos.makeMove(pos.moveFromUci(p.best));
+    if (pos.status().state === 'ongoing') {
+      const after = new Set(pos.legalMoves().map(m => pos.moveToUci(m)));
+      assert(after.has(e.play({ fen, moves: [p.best], elo: 1500 }).best), `reply from ${fen}`);
+    }
+    assert.strictEqual(Object.keys(e.analyse({ fen, moves: [], movetime: 100 }).scores).length, legal.size);
+  }
+  console.log('ok   play and analyse from set-up positions');
 })().catch(err => {
   console.error(err);
   process.exit(1);

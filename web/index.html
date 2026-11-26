@@ -387,6 +387,17 @@
           <button data-elo="2000">2000</button><button data-elo="2400">2400</button><button data-elo="3000">3000</button>
         </div>
       </div>
+      <div id="pveFenWrap" hidden>
+        <h3>Starting position</h3>
+        <div class="seg" id="pveFenSeg">
+          <label><input type="radio" name="pvefen" value="custom" checked><span>This position</span></label>
+          <label><input type="radio" name="pvefen" value="std"><span>Standard</span></label>
+        </div>
+        <div class="ofen-row ofen" id="pveFenPreview">
+          <div class="mini-board" id="pveFenBoard" aria-label="The starting position"></div>
+          <div class="ofen-side"><p class="ofen-info" id="pveFenInfo"></p></div>
+        </div>
+      </div>
       <h3>Play as</h3>
       <div class="seg" id="colorSeg">
         <label><input type="radio" name="color" value="w" checked><span>White</span></label>
