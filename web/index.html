@@ -36,47 +36,57 @@
         <div class="hero-text">
           <p class="eyebrow">Maki · 6×6 · drops</p>
           <h1>Every square is two steps and a turn away.</h1>
-          <p class="lede">A small board, a reserve to drop from, and a knight that still moves in its L. Play Stockhorse, the engine, sit a friend down beside you, or send them a link. Then review the game to see which moves were brilliant and which were blunders.</p>
+          <p class="lede">A small board, a reserve to drop from, and a knight that still moves in its L. Play Stockhorse, the engine, or a friend, then review the game move by move.</p>
         </div>
         <div class="hero-art" id="heroArt" aria-hidden="true"></div>
       </div>
 
-      <a class="learn-banner" href="#/learn">
+      <!-- First visit only: point a new player at the lessons. Hidden once they have opened Learn or dismissed it. -->
+      <div class="learn-banner" id="learnBanner" hidden>
         <span class="learn-banner-icon" data-piece="P" aria-hidden="true"></span>
-        <span class="learn-banner-text"><b>New to Maki?</b> Learn to play in 15 short lessons, with exercises on the board. No chess needed.</span>
-        <span class="btn primary">Start learning</span>
-      </a>
+        <span class="learn-banner-text"><b>New to Maki?</b> Learn the moves in 15 short lessons, with exercises on the board. No chess needed.</span>
+        <a class="btn primary" href="#/learn" id="learnBannerGo">Start lesson 1</a>
+        <button class="learn-banner-close" id="learnBannerClose" type="button" aria-label="Hide this tip">×</button>
+      </div>
 
-      <div class="modes">
-        <button class="mode-card" data-mode="pve">
+      <div class="start">
+        <button class="mode-card play-main" data-mode="pve">
           <span class="mode-icon" data-piece="N"></span>
-          <span class="mode-title">Play Stockhorse</span>
-          <span class="mode-sub">Pick a strength by Elo, from a beginner who blunders to 3000 at full strength.</span>
+          <span class="play-main-text">
+            <span class="mode-title">Play</span>
+            <span class="mode-sub">Against Stockhorse, at the strength you choose</span>
+          </span>
+          <span class="play-main-go" aria-hidden="true">→</span>
         </button>
-        <button class="mode-card" data-mode="local">
-          <span class="mode-icon" data-piece="R"></span>
-          <span class="mode-title">Pass and play</span>
-          <span class="mode-sub">Two players, one screen. The board turns to face whoever is to move.</span>
-        </button>
-        <button class="mode-card" data-mode="online" id="onlineCard">
-          <span class="mode-icon" data-piece="Q"></span>
-          <span class="mode-title">Play online</span>
-          <span class="mode-sub" id="onlineSub">Quick pairing or an invite link, with clocks, draw offers and rematches.</span>
-        </button>
-        <button class="mode-card" data-mode="analysis">
-          <span class="mode-icon" data-piece="K"></span>
-          <span class="mode-title">Analysis board</span>
-          <span class="mode-sub">Set up any position, try moves for both sides and see Stockhorse's best lines.</span>
-        </button>
-        <button class="mode-card" data-mode="train">
+        <div class="play-alt">
+          <button class="mode-card alt" data-mode="local">
+            <span class="mode-title">Pass and play</span>
+            <span class="mode-sub">A friend beside you</span>
+          </button>
+          <button class="mode-card alt" data-mode="online" id="onlineCard">
+            <span class="mode-title">Play online</span>
+            <span class="mode-sub" id="onlineSub">A friend by link, or a quick pairing</span>
+          </button>
+        </div>
+      </div>
+
+      <h2 class="more-title">More</h2>
+      <div class="more">
+        <button class="more-row" data-mode="learn" id="learnRow">
           <span class="mode-icon" data-piece="P"></span>
-          <span class="mode-title">Train</span>
-          <span class="mode-sub">Named openings to learn, and hundreds of middlegame tactics and endgames to solve.</span>
+          <span><span class="mode-title">Learn</span><span class="mode-sub">15 lessons from the moves up</span></span>
         </button>
-        <button class="mode-card" data-mode="review">
+        <button class="more-row" data-mode="train">
+          <span class="mode-icon" data-piece="R"></span>
+          <span><span class="mode-title">Train</span><span class="mode-sub">Openings, tactics and endgames</span></span>
+        </button>
+        <button class="more-row" data-mode="analysis">
+          <span class="mode-icon" data-piece="K"></span>
+          <span><span class="mode-title">Analysis board</span><span class="mode-sub">Set up a position, see the best lines</span></span>
+        </button>
+        <button class="more-row" data-mode="review">
           <span class="mode-icon" data-piece="B"></span>
-          <span class="mode-title">Review a game</span>
-          <span class="mode-sub">Move-by-move analysis with accuracy, an evaluation graph and Stockhorse's best line.</span>
+          <span><span class="mode-title">Review a game</span><span class="mode-sub">Accuracy, blunders and better moves</span></span>
         </button>
       </div>
 

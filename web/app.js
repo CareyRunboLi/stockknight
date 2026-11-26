@@ -2636,6 +2636,7 @@
       showView('rules');
     } else if (/^#\/learn(\/[a-z0-9-]+)?$/.test(h)) {
       showView('learn');
+      store.set('sk.learnTip', 'seen');
       window.Tutorial.show(h.split('/')[2]);
     } else if (/^#\/train(\/|$)/.test(h)) {
       showView('train');
@@ -2643,8 +2644,22 @@
     } else {
       showView('home');
       renderRecent();
+      renderLearnTip();
     }
     window.scrollTo(0, 0);
+  }
+
+  // A first-time visitor sees one pointer to the lessons above the Play button. It goes away
+  // for good once they open Learn, have a saved game, or close it.
+  function renderLearnTip() {
+    let learnt = false;
+    try {
+      const v = JSON.parse(localStorage.getItem('sk.learn') || 'null');
+      learnt = !!(v && v.done && Object.keys(v.done).length);
+    } catch {
+      /* no storage: treat it as a first visit */
+    }
+    $('#learnBanner').hidden = !!store.get('sk.learnTip', null) || learnt || savedGames().length > 0;
   }
 
   // --- decoration -------------------------------------------------------------------------
@@ -2712,7 +2727,7 @@
       openPve: fen => openPveDialog(fen),
     });
 
-    $$('.mode-card').forEach(card => {
+    $$('.mode-card, .more-row').forEach(card => {
       card.onclick = () => {
         const m = card.dataset.mode;
         if (m === 'pve') openPveDialog();
@@ -2723,8 +2738,13 @@
         else if (m === 'review') location.hash = '#/review';
         else if (m === 'analysis') location.hash = '#/analysis';
         else if (m === 'train') location.hash = '#/train';
+        else if (m === 'learn') location.hash = '#/learn';
       };
     });
+    $('#learnBannerClose').onclick = () => {
+      store.set('sk.learnTip', 'dismissed');
+      renderLearnTip();
+    };
     document.addEventListener('click', e => {
       const b = e.target.closest('[data-game]');
       if (b) openSaved(b.dataset.game);
